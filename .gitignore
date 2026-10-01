@@ -10,6 +10,7 @@ node_modules/
 !**/.env.local.example
 wakati-frontend/.env.local
 wakati-api/.env
+./vendor
 
 # Build / cache
 wakati-frontend/.next/
