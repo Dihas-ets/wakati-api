@@ -1,0 +1,85 @@
+<?php
+
+use App\Http\Controllers\Api\AbsenceController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BadgeController;
+use App\Http\Controllers\Api\CompanySettingController;
+use App\Http\Controllers\Api\DepartmentController;
+use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\ExportController;
+use App\Http\Controllers\Api\StatsController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\ScheduleController;
+use App\Http\Controllers\Api\WorkPatternController;
+use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\LeaveController;
+use App\Http\Controllers\Api\ExplanationRequestController;
+use App\Http\Controllers\Api\ActivityLogController;
+use App\Http\Controllers\Api\KioskHeartbeatController;
+use App\Http\Controllers\Api\KioskSecurityController;
+use Illuminate\Support\Facades\Route;
+
+// --- Authentification (publique avec anti-brute force strict) ---
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login')->name('login');
+
+// --- Synchronisation hors-ligne & Heartbeat borne (secret partagé / session admin) ---
+Route::middleware('offline-sync')->group(function () {
+    Route::post('/attendance/sync-offline', [AttendanceController::class, 'syncOffline'])->middleware('throttle:sync-batch');
+    Route::get('/attendance/valid-badges', [AttendanceController::class, 'validBadges']);
+    Route::post('/kiosk/heartbeat', [KioskHeartbeatController::class, 'heartbeat'])->middleware('throttle:kiosk-heartbeat');
+});
+
+// --- Routes protégées (nécessitent un token Bearer valide) ---
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/me', [AuthController::class, 'me']);
+
+    Route::get('/employees', [EmployeeController::class, 'index']);
+    Route::get('/departments', [DepartmentController::class, 'index']);
+    Route::patch('/employees/me/status', [EmployeeController::class, 'updateOwnStatus']);
+    Route::get('/absences', [AbsenceController::class, 'index']);
+    Route::get('/attendances', [AttendanceController::class, 'index']);
+    Route::get('/explanation-requests', [ExplanationRequestController::class, 'index']);
+    Route::post('/explanation-requests/{explanationRequest}/respond', [ExplanationRequestController::class, 'respond']);
+
+    Route::middleware('role:rh,directeur')->group(function () {
+        Route::post('/employees', [EmployeeController::class, 'store']);
+        Route::put('/employees/{user}', [EmployeeController::class, 'update']);
+        Route::delete('/employees/{user}', [EmployeeController::class, 'destroy']);
+        Route::post('/departments', [DepartmentController::class, 'store']);
+        Route::put('/departments/{department}', [DepartmentController::class, 'update']);
+        Route::patch('/departments/{department}', [DepartmentController::class, 'update']);
+        Route::delete('/departments/{department}', [DepartmentController::class, 'destroy']);
+        Route::post('/employees/{user}/badge-pairing', [BadgeController::class, 'startPairing']);
+
+        Route::get('/company-settings', [CompanySettingController::class, 'index']);
+        Route::put('/company-settings', [CompanySettingController::class, 'update']);
+
+        Route::patch('/absences/{absence}/justify', [AbsenceController::class, 'justify']);
+        Route::get('/dashboard/rh-summary', [StatsController::class, 'rhSummary']);
+        Route::get('/kiosk/heartbeats', [KioskHeartbeatController::class, 'index']);
+    });
+
+    Route::middleware('role:comptable,directeur')->group(function () {
+        Route::get('/dashboard/accounting-summary', [StatsController::class, 'accountingSummary']);
+        Route::get('/exports/attendances.csv', [ExportController::class, 'attendancesCsv']);
+    });
+
+    Route::middleware('role:directeur')->group(function () {
+        Route::get('/users', [UserController::class, 'index']);
+        Route::post('/users', [UserController::class, 'store']);
+        Route::put('/users/{user}', [UserController::class, 'update']);
+        Route::delete('/users/{user}', [UserController::class, 'destroy']);
+    });
+
+    // --- Présences, retards, absences, congés ---
+    Route::apiResource('schedules', ScheduleController::class);
+    Route::apiResource('work-patterns', WorkPatternController::class)->except(['show']);
+    Route::apiResource('leaves', LeaveController::class)->except(['show']);
+    Route::post('attendance/check-in', [AttendanceController::class, 'checkIn'])->middleware('throttle:scan');
+    Route::post('attendance/check-out', [AttendanceController::class, 'checkOut'])->middleware('throttle:scan');
+    Route::post('/employees/{user}/ensure-badge', [BadgeController::class, 'ensureBadge']);
+
+    // --- Sécurité borne de pointage ---
+    Route::post('/kiosk/verify-access', [KioskSecurityController::class, 'verifyAccess']);
+});

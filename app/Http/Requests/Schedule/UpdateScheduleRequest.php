@@ -1,0 +1,25 @@
+<?php
+
+namespace App\Http\Requests\Schedule;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class UpdateScheduleRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return in_array($this->user()?->role, ['rh', 'directeur'], true);
+    }
+
+    public function rules(): array
+    {
+        return [
+            'user_id' => ['sometimes', 'integer', 'exists:users,id'],
+            'title' => ['nullable', 'string', 'max:255'],
+            'date' => ['sometimes', 'date'],
+            'start_time' => ['sometimes', 'date_format:H:i'],
+            'end_time' => ['sometimes', 'date_format:H:i'],
+            'is_remote' => ['boolean'],
+        ];
+    }
+}

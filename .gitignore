@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+!**/.env.local.example
+wakati-frontend/.env.local
+wakati-api/.env
+
+# Build / cache
+wakati-frontend/.next/
+wakati-frontend/out/
+wakati-frontend/dist/
+wakati-frontend/tsconfig.tsbuildinfo
+wakati-frontend/.turbo/
+
+# Native / local tooling
+wakati-frontend/android/
+wakati-frontend/ios/
+wakati-frontend/certificates/
+*.pem
+*.key
+
+# Archives & OS junk
+wakatti.zip
+*.zip
+.DS_Store
+Thumbs.db
+*.log
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+.codex/
