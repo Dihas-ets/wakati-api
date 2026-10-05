@@ -22,7 +22,15 @@ class DepartmentController extends Controller
     {
         $this->authorize('viewAny', Department::class);
 
-        return response()->json(Department::orderBy('name')->get(['id', 'name']));
+        return response()->json(
+            Department::with(['users' => function ($q) {
+                $q->select('id', 'name', 'email', 'role', 'job_title', 'department_id', 'status', 'card_uid')
+                    ->orderBy('name');
+            }])
+            ->withCount('users')
+            ->orderBy('name')
+            ->get()
+        );
     }
 
     /**

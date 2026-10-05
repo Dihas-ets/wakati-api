@@ -10,7 +10,7 @@ class StoreUserRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === User::ROLE_DIRECTEUR;
+        return in_array($this->user()?->role, [User::ROLE_DIRECTEUR, User::ROLE_RH], true);
     }
 
     public function rules(): array
@@ -20,6 +20,8 @@ class StoreUserRequest extends FormRequest
             'email' => ['required', 'string', 'email:rfc', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'max:128'],
             'role' => ['required', Rule::in(User::ROLES)],
+            'job_title' => ['nullable', 'string', 'max:255'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
         ];
     }
 }

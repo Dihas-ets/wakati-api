@@ -65,7 +65,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/exports/attendances.csv', [ExportController::class, 'attendancesCsv']);
     });
 
-    Route::middleware('role:directeur')->group(function () {
+    Route::middleware('role:rh,directeur')->group(function () {
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{user}', [UserController::class, 'update']);

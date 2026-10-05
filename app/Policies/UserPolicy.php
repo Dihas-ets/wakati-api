@@ -7,11 +7,11 @@ use App\Models\User;
 class UserPolicy
 {
     /**
-     * Seul le Directeur peut lister tous les comptes utilisateurs administratifs.
+     * Le Directeur et les RH peuvent lister tous les comptes utilisateurs.
      */
     public function viewAny(User $user): bool
     {
-        return $user->role === User::ROLE_DIRECTEUR;
+        return in_array($user->role, [User::ROLE_DIRECTEUR, User::ROLE_RH], true);
     }
 
     /**
@@ -43,7 +43,7 @@ class UserPolicy
             return true;
         }
 
-        if ($user->role === User::ROLE_RH && in_array($model->role, [User::ROLE_EMPLOYE, User::ROLE_COMPTABLE], true)) {
+        if ($user->role === User::ROLE_RH && $model->role !== User::ROLE_DIRECTEUR) {
             return true;
         }
 
@@ -51,7 +51,7 @@ class UserPolicy
     }
 
     /**
-     * Suppression d'un utilisateur (interdiction absolue de supprimer son propre compte).
+     * Suppression d'un utilisateur (interdiction absolue de supprimer son propre compte ou pour un RH de supprimer un Directeur).
      */
     public function delete(User $user, User $model): bool
     {
@@ -59,7 +59,15 @@ class UserPolicy
             return false;
         }
 
-        return in_array($user->role, [User::ROLE_DIRECTEUR, User::ROLE_RH], true);
+        if ($user->role === User::ROLE_DIRECTEUR) {
+            return true;
+        }
+
+        if ($user->role === User::ROLE_RH && $model->role !== User::ROLE_DIRECTEUR) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

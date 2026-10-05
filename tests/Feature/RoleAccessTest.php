@@ -28,13 +28,13 @@ class RoleAccessTest extends TestCase
         $response->assertStatus(200);
     }
 
-    public function test_rh_cannot_access_user_management(): void
+    public function test_rh_can_access_user_management(): void
     {
         $rh = User::factory()->create(['role' => 'rh']);
 
         $response = $this->actingAs($rh, 'sanctum')->getJson('/api/users');
 
-        $response->assertStatus(403);
+        $response->assertStatus(200);
     }
 
     public function test_employee_cannot_update_company_settings(): void

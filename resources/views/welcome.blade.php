@@ -4,6 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Wakati API • Service Opérationnel</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after {
             box-sizing: border-box;
@@ -12,242 +16,192 @@
         }
 
         :root {
-            --brand-primary: #795FFC;
-            --brand-primary-light: #9b87fd;
-            --brand-primary-glow: rgba(121, 95, 252, 0.35);
-            --brand-emerald: #10B981;
-            --brand-emerald-glow: rgba(16, 185, 129, 0.4);
-            --brand-cyan: #06B6D4;
-            --bg-dark: #0a0d14;
-            --border-subtle: rgba(121, 95, 252, 0.15);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --text-dim: #64748b;
+            --bg-color: #07090e;
+            --text-main: #ffffff;
+            --text-highlight: #c4b5fd;
+            --brand-primary: #795ffc;
+            --emerald: #10b981;
+            --muted: #4b5563;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: var(--bg-dark);
+            font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
             color: var(--text-main);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            justify-content: space-between;
             position: relative;
-            overflow-x: hidden;
-            line-height: 1.5;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
         }
 
-        /* Effets de lueur et d'arrière-plan vibrant */
-        .ambient-glow-1 {
-            position: fixed;
-            top: -150px;
+        /* Lueur d'ambiance centrale douce */
+        .ambient-glow {
+            position: absolute;
+            top: 30%;
             left: 50%;
-            transform: translateX(-50%);
-            width: 700px;
-            height: 450px;
-            background: radial-gradient(circle, rgba(121, 95, 252, 0.28) 0%, rgba(59, 130, 246, 0.15) 45%, transparent 70%);
-            pointer-events: none;
-            z-index: 0;
-            filter: blur(40px);
-        }
-
-        .ambient-glow-2 {
-            position: fixed;
-            bottom: -100px;
-            right: 5%;
-            width: 500px;
-            height: 350px;
-            background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 60%);
-            pointer-events: none;
-            z-index: 0;
+            transform: translate(-50%, -50%);
+            width: 720px;
+            height: 480px;
+            background: radial-gradient(ellipse at center, rgba(121, 95, 252, 0.16) 0%, rgba(59, 130, 246, 0.08) 35%, rgba(7, 9, 14, 0) 70%);
             filter: blur(50px);
+            pointer-events: none;
+            z-index: 1;
         }
 
-        .content-wrapper {
+        /* Header en haut */
+        header {
             position: relative;
             z-index: 10;
-            width: 100%;
-            max-width: 980px;
-            margin: 0 auto;
-            padding: 24px 20px;
-        }
-
-        /* En-tête */
-        header {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            padding: 32px 48px;
+            width: 100%;
         }
 
-        .logo-group {
+        .header-brand {
             display: flex;
             align-items: center;
             gap: 12px;
             text-decoration: none;
         }
 
-        .logo-icon {
+        .logo-box {
             width: 44px;
-            height: 34px;
-            border-radius: 8px;
-            background: rgba(121, 95, 252, 0.12);
+            height: 44px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 0 16px var(--brand-primary-glow);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            flex-shrink: 0;
-            overflow: hidden;
-            padding: 2px 4px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            padding: 6px;
         }
 
-        .logo-icon img {
+        .logo-box img {
             width: 100%;
             height: 100%;
             object-fit: contain;
-            display: block;
         }
 
-        .logo-title {
-            font-size: 1.15rem;
+        .brand-title {
+            font-size: 1.25rem;
             font-weight: 800;
+            color: #ffffff;
             letter-spacing: -0.02em;
-            background: linear-gradient(to right, #ffffff, #cbd5e1);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
         }
 
-        .badge-gateway {
+        .badge-core {
             font-size: 0.65rem;
-            font-weight: 700;
-            letter-spacing: 0.05em;
+            font-weight: 800;
+            letter-spacing: 0.08em;
             text-transform: uppercase;
-            padding: 3px 8px;
+            padding: 4px 10px;
             border-radius: 9999px;
-            background: rgba(121, 95, 252, 0.15);
-            color: var(--brand-primary-light);
+            background: rgba(121, 95, 252, 0.18);
+            color: #b4a2fe;
             border: 1px solid rgba(121, 95, 252, 0.35);
-            margin-left: 8px;
         }
 
-        /* Pillule de statut en haut */
-        .live-status-pill {
+        /* Badge Statut Opérationnel */
+        .status-badge {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 6px 14px;
+            padding: 7px 22px;
             border-radius: 9999px;
-            font-size: 0.75rem;
+            font-size: 0.82rem;
             font-weight: 600;
-            background: rgba(16, 185, 129, 0.12);
-            color: #34d399;
-            border: 1px solid rgba(16, 185, 129, 0.35);
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.18);
+            color: #2ed697;
+            background: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.38);
+            letter-spacing: 0.01em;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
         }
 
-        .ping-beacon {
+        /* Contenu Principal Centré */
+        main {
             position: relative;
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-        }
-
-        .ping-beacon .ring {
-            position: absolute;
-            inset: 0;
-            border-radius: 50%;
-            background-color: var(--brand-emerald);
-            opacity: 0.75;
-            animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
-        }
-
-        .ping-beacon .dot {
-            position: relative;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: var(--brand-emerald);
-            box-shadow: 0 0 8px var(--brand-emerald);
-        }
-
-        @keyframes ping {
-            75%, 100% {
-                transform: scale(2.3);
-                opacity: 0;
-            }
-        }
-
-        /* Contenu central */
-        .center-container {
+            z-index: 10;
             flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 20px;
             text-align: center;
-            padding: 40px 20px;
-            position: relative;
-            z-index: 10;
         }
 
-        .center-title {
-            font-size: clamp(1.6rem, 3.5vw, 2.5rem);
+        .hero-title {
+            font-size: clamp(2rem, 4vw, 2.9rem);
             font-weight: 700;
-            letter-spacing: -0.02em;
-            line-height: 1.3;
-            background: linear-gradient(135deg, #ffffff 40%, #c4b5fd 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 35px rgba(121, 95, 252, 0.25);
+            letter-spacing: -0.025em;
+            line-height: 1.25;
+            color: #ffffff;
+            max-width: 900px;
+        }
+
+        .hero-title .highlight {
+            color: var(--text-highlight);
+            font-weight: 700;
         }
 
         /* Pied de page */
         footer {
-            padding: 24px 20px;
-            text-align: center;
-            font-size: 0.8rem;
-            color: var(--text-dim);
             position: relative;
             z-index: 10;
+            text-align: center;
+            padding: 28px 20px;
+            font-size: 0.8rem;
+            color: var(--muted);
+            letter-spacing: -0.01em;
+        }
+
+        @media (max-width: 640px) {
+            header {
+                padding: 20px 24px;
+            }
+            .hero-title {
+                font-size: 1.85rem;
+            }
+            .badge-core {
+                display: none;
+            }
         }
     </style>
 </head>
 <body>
 
-    <!-- Lueur ambiante dynamique -->
-    <div class="ambient-glow-1"></div>
-    <div class="ambient-glow-2"></div>
+    <!-- Lueur ambiante d'arrière-plan -->
+    <div class="ambient-glow"></div>
 
-    <div class="content-wrapper">
-        <!-- En-tête -->
-        <header>
-            <div class="logo-group">
-                <div class="logo-icon">
-                    <img src="{{ asset('logos.svg') }}" alt="Logo Wakati">
-                </div>
-                <div style="display: flex; align-items: center;">
-                    <span class="logo-title">Wakati</span>
-                    <span class="badge-gateway">API Core</span>
-                </div>
+    <!-- En-tête -->
+    <header>
+        <div class="header-brand">
+            <div class="logo-box">
+                <img src="/logos.svg" alt="Wakati" />
             </div>
+            <span class="brand-title">Wakati</span>
+            <span class="badge-core">API CORE</span>
+        </div>
 
-            <div class="live-status-pill">
-                <span class="ping-beacon">
-                    <span class="ring"></span>
-                    <span class="dot"></span>
-                </span>
-                <span>Opérationnel</span>
-            </div>
-        </header>
-    </div>
+        <div class="status-badge">
+            Opérationnel
+        </div>
+    </header>
 
-    <!-- Message central -->
-    <main class="center-container">
-        <h1 class="center-title">L&apos;API de Wakati fonctionne correctement</h1>
+    <!-- Titre au centre -->
+    <main>
+        <h1 class="hero-title">
+            L&apos;API de Wakati fonctionne <span class="highlight">correctement</span>
+        </h1>
     </main>
 
     <!-- Pied de page -->
     <footer>
-        <p>© {{ date('Y') }} Wakati Système par Diha's</p>
+        <p>© 2026 Wakati Système par Diha&apos;s</p>
     </footer>
 
 </body>

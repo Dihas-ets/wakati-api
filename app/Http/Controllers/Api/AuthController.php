@@ -29,6 +29,12 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($user->status === 'blocked') {
+            throw ValidationException::withMessages([
+                'email' => ["Ce compte a été bloqué par l'administrateur."],
+            ]);
+        }
+
         // Un seul token actif à la fois par appareil ; on peut nommer le token
         // avec le user-agent pour le retrouver plus tard si besoin.
         $token = $user->createToken('wakati-frontend')->plainTextToken;
@@ -38,6 +44,8 @@ class AuthController extends Controller
             'last_login_at' => now(),
         ]);
 
+        $user->load('department:id,name');
+
         return response()->json([
             'token' => $token,
             'user' => [
@@ -45,6 +53,9 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
+                'job_title' => $user->job_title,
+                'department' => $user->department,
+                'status' => $user->status,
                 'card_uid' => $user->card_uid ?? $user->ensureCardUid(),
             ],
         ]);
