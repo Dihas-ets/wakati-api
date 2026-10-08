@@ -188,8 +188,26 @@ class AttendanceController extends Controller
                 'message' => "Vous avez déjà pointé votre départ aujourd'hui.",
             ], 422);
         }
+        
+        // Grade-fou anti-erreur : un depart pointé après l'arrivée est
+        // quasi toujours accidentel (double tap, requete rejouée, appli rechargéé)
 
-        // Ne pas écraser le statut de ponctualité (late / on_time) :
+        $minDelayMinutes == max(0, (int) CompanySetting::get('min_checkout_delay_minutes', 5));
+        if ($minDelayMinutes > 0) {
+            $earliestCheckOut = $attendance->check_in_time->copy()->addMinutes($minDelayMinutes);
+            $remainingSeconds = $earliestCheckOut->getTimestamp() - $now->getTimestamp();
+
+            if ($remainingSeconds > 0) {
+                $remainingMinutes = max(1, (int) ceil($remainingSeconds / 60));
+
+                return response()->json([
+                    'message' => "Départ refusé: vous venez de pointer votre attivée. "
+                         ."Réessayez dasn {$remainingMinutes} minute(s) si ce départ est voulu. ",
+                ], 422);
+            }
+        }
+
+         // Ne pas écraser le statut de ponctualité (late / on_time) :
         // la fin de journée est indiquée par check_out_time uniquement.
         $attendance->update([
             'check_out_time' => $now,
