@@ -12,17 +12,29 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
-     * Rôles disponibles dans l'application.
+     * Rôles disponibles dans l'application SaaS Multi-Agences.
      */
-    public const ROLE_RH = 'rh';
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+    public const ROLE_COMPANY_ADMIN = 'company_admin';
+    public const ROLE_BRANCH_MANAGER = 'branch_manager';
+    public const ROLE_HR_MANAGER = 'hr_manager';
+    public const ROLE_EMPLOYEE = 'employee';
+
+    // Rôles historiques préservés pour rétrocompatibilité
+    public const ROLE_DIRECTEUR = 'directeur'; // Alias branch_manager
+    public const ROLE_RH = 'rh';               // Alias hr_manager
     public const ROLE_COMPTABLE = 'comptable';
-    public const ROLE_DIRECTEUR = 'directeur';
-    public const ROLE_EMPLOYE = 'employe';
+    public const ROLE_EMPLOYE = 'employe';     // Alias employee
 
     public const ROLES = [
+        self::ROLE_SUPER_ADMIN,
+        self::ROLE_COMPANY_ADMIN,
+        self::ROLE_BRANCH_MANAGER,
+        self::ROLE_HR_MANAGER,
+        self::ROLE_EMPLOYEE,
+        self::ROLE_DIRECTEUR,
         self::ROLE_RH,
         self::ROLE_COMPTABLE,
-        self::ROLE_DIRECTEUR,
         self::ROLE_EMPLOYE,
     ];
 
@@ -40,7 +52,12 @@ class User extends Authenticatable
     ];
 
     protected $fillable = [
+        'company_id',
+        'branch_id',
         'name',
+        'first_name',
+        'last_name',
+        'phone',
         'email',
         'password',
         'role',
@@ -65,13 +82,81 @@ class User extends Authenticatable
         ];
     }
 
+    public function company(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function branch(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
     public function department(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Department::class);
     }
 
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === self::ROLE_SUPER_ADMIN;
+    }
+
+    public function isCompanyAdmin(): bool
+    {
+        return $this->role === self::ROLE_COMPANY_ADMIN;
+    }
+
+    public function isBranchManager(): bool
+    {
+        return in_array($this->role, [self::ROLE_BRANCH_MANAGER, self::ROLE_DIRECTEUR], true);
+    }
+
+    public function isHrManager(): bool
+    {
+        return in_array($this->role, [self::ROLE_HR_MANAGER, self::ROLE_RH], true);
+    }
+
+    public function isEmployee(): bool
+    {
+        return in_array($this->role, [self::ROLE_EMPLOYEE, self::ROLE_EMPLOYE], true);
+    }
+
+    public function canAccessBranch(int|Branch|null $branch): bool
+    {
+        if ($this->isSuperAdmin() || $this->isCompanyAdmin()) {
+            return true;
+        }
+
+        $branchId = $branch instanceof Branch ? $branch->id : $branch;
+
+        return $this->branch_id !== null && (int) $this->branch_id === (int) $branchId;
+    }
+
     public function hasRole(string $role): bool
     {
+        if ($this->role === self::ROLE_SUPER_ADMIN) {
+            return true;
+        }
+
+        // Aliases d'équivalence
+        $roleMap = [
+            self::ROLE_BRANCH_MANAGER => [self::ROLE_BRANCH_MANAGER, self::ROLE_DIRECTEUR],
+            self::ROLE_DIRECTEUR => [self::ROLE_BRANCH_MANAGER, self::ROLE_DIRECTEUR],
+            self::ROLE_HR_MANAGER => [self::ROLE_HR_MANAGER, self::ROLE_RH],
+            self::ROLE_RH => [self::ROLE_HR_MANAGER, self::ROLE_RH],
+            self::ROLE_EMPLOYEE => [self::ROLE_EMPLOYEE, self::ROLE_EMPLOYE],
+            self::ROLE_EMPLOYE => [self::ROLE_EMPLOYEE, self::ROLE_EMPLOYE],
+        ];
+
+        if ($this->role === self::ROLE_COMPANY_ADMIN) {
+            return true; // Le company_admin a autorité sur son entreprise et toutes ses agences
+        }
+
+        if (isset($roleMap[$role])) {
+            return in_array($this->role, $roleMap[$role], true);
+        }
+
         return $this->role === $role;
     }
 

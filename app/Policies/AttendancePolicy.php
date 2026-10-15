@@ -8,8 +8,19 @@ use App\Models\User;
 class AttendancePolicy
 {
     /**
+     * Bypasser pour le SUPER_ADMIN
+     */
+    public function before(User $user, string $ability): ?bool
+    {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        return null;
+    }
+
+    /**
      * Détermine si l'utilisateur peut voir la liste des pointages.
-     * Les directeurs, RH et comptables peuvent lister, les employés ne voient que les leurs.
      */
     public function viewAny(User $user): bool
     {
@@ -21,7 +32,15 @@ class AttendancePolicy
      */
     public function view(User $user, Attendance $attendance): bool
     {
-        if (in_array($user->role, [User::ROLE_DIRECTEUR, User::ROLE_RH, User::ROLE_COMPTABLE], true)) {
+        if ($attendance->company_id && $user->company_id !== $attendance->company_id) {
+            return false;
+        }
+
+        if ($user->isCompanyAdmin()) {
+            return true;
+        }
+
+        if (($user->isBranchManager() || $user->isHrManager()) && $user->branch_id === $attendance->branch_id) {
             return true;
         }
 
@@ -29,7 +48,7 @@ class AttendancePolicy
     }
 
     /**
-     * Détermine si l'utilisateur peut enregistrer un pointage pour un compte donné.
+     * Détermine si l'utilisateur peut enregistrer un pointage.
      */
     public function create(User $user): bool
     {
@@ -37,18 +56,36 @@ class AttendancePolicy
     }
 
     /**
-     * Modification d'un pointage : réservé à la Direction et RH.
+     * Modification / régularisation d'un pointage :
+     * - COMPANY_ADMIN : sur toute l'entreprise.
+     * - BRANCH_MANAGER / HR_MANAGER : uniquement sur son agence.
      */
     public function update(User $user, Attendance $attendance): bool
     {
-        return in_array($user->role, [User::ROLE_DIRECTEUR, User::ROLE_RH], true);
+        if ($attendance->company_id && $user->company_id !== $attendance->company_id) {
+            return false;
+        }
+
+        if ($user->isCompanyAdmin()) {
+            return true;
+        }
+
+        return ($user->isBranchManager() || $user->isHrManager()) && $user->branch_id === $attendance->branch_id;
     }
 
     /**
-     * Suppression d'un pointage : réservé à la Direction.
+     * Suppression d'un pointage : réservé au COMPANY_ADMIN ou au BRANCH_MANAGER de l'agence.
      */
     public function delete(User $user, Attendance $attendance): bool
     {
-        return $user->role === User::ROLE_DIRECTEUR;
+        if ($attendance->company_id && $user->company_id !== $attendance->company_id) {
+            return false;
+        }
+
+        if ($user->isCompanyAdmin()) {
+            return true;
+        }
+
+        return $user->isBranchManager() && $user->branch_id === $attendance->branch_id;
     }
 }

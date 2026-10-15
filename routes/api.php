@@ -1,26 +1,32 @@
 <?php
 
 use App\Http\Controllers\Api\AbsenceController;
+use App\Http\Controllers\Api\ActivityLogController;
+use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BadgeController;
+use App\Http\Controllers\Api\BranchController;
+use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CompanySettingController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\EmployeeController;
-use App\Http\Controllers\Api\ExportController;
-use App\Http\Controllers\Api\StatsController;
-use App\Http\Controllers\Api\UserController;
-use App\Http\Controllers\Api\ScheduleController;
-use App\Http\Controllers\Api\WorkPatternController;
-use App\Http\Controllers\Api\AttendanceController;
-use App\Http\Controllers\Api\LeaveController;
 use App\Http\Controllers\Api\ExplanationRequestController;
-use App\Http\Controllers\Api\ActivityLogController;
+use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\KioskHeartbeatController;
 use App\Http\Controllers\Api\KioskSecurityController;
+use App\Http\Controllers\Api\LeaveController;
+use App\Http\Controllers\Api\PlanController;
+use App\Http\Controllers\Api\ScheduleController;
+use App\Http\Controllers\Api\StatsController;
+use App\Http\Controllers\Api\SuperAdminController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\WorkPatternController;
 use Illuminate\Support\Facades\Route;
 
-// --- Authentification (publique avec anti-brute force strict) ---
+// --- Routes publiques ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login')->name('login');
+Route::post('/register-company', [AuthController::class, 'registerCompany'])->middleware('throttle:login');
+Route::get('/plans', [PlanController::class, 'index']);
 
 // --- Synchronisation hors-ligne & Heartbeat borne (secret partagé / session admin) ---
 Route::middleware('offline-sync')->group(function () {
@@ -34,6 +40,44 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 
+    // --- Profil & Abonnements de l'entreprise courante ---
+    Route::get('/company/profile', [CompanyController::class, 'profile']);
+    Route::put('/company/profile', [CompanyController::class, 'updateProfile']);
+    Route::get('/company/subscription', [CompanyController::class, 'subscription']);
+    Route::post('/company/subscription/change', [CompanyController::class, 'changeSubscription']);
+    Route::get('/company/payments', [CompanyController::class, 'payments']);
+
+    // --- Module Multi-Agences (Branches) ---
+    Route::get('/branches', [BranchController::class, 'index']);
+    Route::get('/branches/{branch}', [BranchController::class, 'show']);
+    Route::middleware('role:company_admin,branch_manager,directeur,super_admin')->group(function () {
+        Route::post('/branches', [BranchController::class, 'store']);
+        Route::put('/branches/{branch}', [BranchController::class, 'update']);
+        Route::delete('/branches/{branch}', [BranchController::class, 'destroy']);
+        Route::post('/branches/{branch}/assign-manager', [BranchController::class, 'assignManager']);
+    });
+
+    // --- Module Super-Admin (plateforme multi-entreprises, forfaits, historique) ---
+    Route::middleware('role:super_admin')->prefix('super-admin')->group(function () {
+        Route::get('/stats', [SuperAdminController::class, 'stats']);
+        Route::get('/companies', [SuperAdminController::class, 'companies']);
+        Route::post('/companies', [SuperAdminController::class, 'storeCompany']);
+        Route::get('/companies/{company}', [SuperAdminController::class, 'showCompany']);
+        Route::put('/companies/{company}', [SuperAdminController::class, 'updateCompany']);
+        Route::patch('/companies/{company}/access', [SuperAdminController::class, 'updateAccess']);
+        Route::post('/companies/{company}/subscriptions', [SuperAdminController::class, 'assignSubscription']);
+
+        Route::get('/plans', [SuperAdminController::class, 'plans']);
+        Route::post('/plans', [SuperAdminController::class, 'storePlan']);
+        Route::put('/plans/{plan}', [SuperAdminController::class, 'updatePlan']);
+        Route::delete('/plans/{plan}', [SuperAdminController::class, 'deletePlan']);
+
+        Route::get('/payments', [SuperAdminController::class, 'payments']);
+        Route::post('/payments', [SuperAdminController::class, 'storePayment']);
+
+        Route::get('/histories', [SuperAdminController::class, 'histories']);
+    });
+
     Route::get('/employees', [EmployeeController::class, 'index']);
     Route::get('/departments', [DepartmentController::class, 'index']);
     Route::patch('/employees/me/status', [EmployeeController::class, 'updateOwnStatus']);
@@ -42,7 +86,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/explanation-requests', [ExplanationRequestController::class, 'index']);
     Route::post('/explanation-requests/{explanationRequest}/respond', [ExplanationRequestController::class, 'respond']);
 
-    Route::middleware('role:rh,directeur')->group(function () {
+    Route::middleware('role:rh,directeur,company_admin')->group(function () {
         Route::post('/employees', [EmployeeController::class, 'store']);
         Route::put('/employees/{user}', [EmployeeController::class, 'update']);
         Route::delete('/employees/{user}', [EmployeeController::class, 'destroy']);
@@ -60,12 +104,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/kiosk/heartbeats', [KioskHeartbeatController::class, 'index']);
     });
 
-    Route::middleware('role:comptable,directeur')->group(function () {
+    Route::middleware('role:comptable,directeur,company_admin')->group(function () {
         Route::get('/dashboard/accounting-summary', [StatsController::class, 'accountingSummary']);
         Route::get('/exports/attendances.csv', [ExportController::class, 'attendancesCsv']);
     });
 
-    Route::middleware('role:rh,directeur')->group(function () {
+    Route::middleware('role:rh,directeur,company_admin')->group(function () {
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{user}', [UserController::class, 'update']);

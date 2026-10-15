@@ -24,12 +24,32 @@ class AttendanceController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Attendance::query();
+        $currentUser = $request->user();
 
-        if (in_array($request->user()->role, ['employe', 'comptable'])) {
-            $query->where('user_id', $request->user()->id);
-        } elseif ($request->has('user_id')) {
-            $query->where('user_id', $request->user_id);
+        $query = Attendance::query()
+            ->with([
+                'user:id,name,email,role,job_title,branch_id',
+                'branch:id,name,code',
+            ]);
+
+        // Cloisonnement Entreprise
+        if (! $currentUser->isSuperAdmin()) {
+            $query->where('company_id', $currentUser->company_id);
+        } elseif ($request->filled('company_id')) {
+            $query->where('company_id', $request->integer('company_id'));
+        }
+
+        // Cloisonnement Agence
+        if ($currentUser->isEmployee()) {
+            $query->where('user_id', $currentUser->id);
+        } elseif ($currentUser->isBranchManager() || $currentUser->isHrManager()) {
+            $query->where('branch_id', $currentUser->branch_id);
+        } elseif ($request->filled('branch_id')) {
+            $query->where('branch_id', $request->integer('branch_id'));
+        }
+
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->integer('user_id'));
         }
 
         if ($request->has('from')) {
@@ -41,7 +61,7 @@ class AttendanceController extends Controller
         }
 
         return response()->json(
-            $query->with('user:id,name,email')->get()
+            $query->orderBy('date', 'desc')->orderBy('check_in_time', 'desc')->get()
         );
     }
 
@@ -188,26 +208,8 @@ class AttendanceController extends Controller
                 'message' => "Vous avez déjà pointé votre départ aujourd'hui.",
             ], 422);
         }
-        
-        // Grade-fou anti-erreur : un depart pointé après l'arrivée est
-        // quasi toujours accidentel (double tap, requete rejouée, appli rechargéé)
 
-        $minDelayMinutes == max(0, (int) CompanySetting::get('min_checkout_delay_minutes', 5));
-        if ($minDelayMinutes > 0) {
-            $earliestCheckOut = $attendance->check_in_time->copy()->addMinutes($minDelayMinutes);
-            $remainingSeconds = $earliestCheckOut->getTimestamp() - $now->getTimestamp();
-
-            if ($remainingSeconds > 0) {
-                $remainingMinutes = max(1, (int) ceil($remainingSeconds / 60));
-
-                return response()->json([
-                    'message' => "Départ refusé: vous venez de pointer votre attivée. "
-                         ."Réessayez dasn {$remainingMinutes} minute(s) si ce départ est voulu. ",
-                ], 422);
-            }
-        }
-
-         // Ne pas écraser le statut de ponctualité (late / on_time) :
+        // Ne pas écraser le statut de ponctualité (late / on_time) :
         // la fin de journée est indiquée par check_out_time uniquement.
         $attendance->update([
             'check_out_time' => $now,
@@ -383,12 +385,15 @@ class AttendanceController extends Controller
         }
 
         return Attendance::create([
+            'company_id' => $user?->company_id,
+            'branch_id' => $user?->branch_id,
             'user_id' => $userId,
             'schedule_id' => $scheduleId,
             'work_pattern_id' => $workPatternId,
             'date' => $timestamp->toDateString(),
             'check_in_time' => $timestamp,
             'status' => $status,
+            'clock_in_mode' => $source,
             'ip_address' => $ip,
             'source' => $source,
             'latitude' => $latitude,
