@@ -97,5 +97,38 @@ class AppServiceProvider extends ServiceProvider
                 ], 429);
             });
         });
+
+        // 3. Application dynamique des paramètres d'e-mails (SMTP) configurés en base
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('company_settings')) {
+                $mailMailer = CompanySetting::get('mail_mailer');
+                if ($mailMailer) {
+                    config(['mail.default' => $mailMailer]);
+                }
+                $mailHost = CompanySetting::get('mail_host');
+                if ($mailHost) {
+                    $scheme = CompanySetting::get('mail_encryption', 'tls');
+                    if ($scheme === 'none' || $scheme === 'null' || ! $scheme) {
+                        $scheme = null;
+                    }
+                    config([
+                        'mail.mailers.smtp.host' => $mailHost,
+                        'mail.mailers.smtp.port' => (int) CompanySetting::get('mail_port', 587),
+                        'mail.mailers.smtp.scheme' => $scheme,
+                        'mail.mailers.smtp.username' => CompanySetting::get('mail_username'),
+                        'mail.mailers.smtp.password' => CompanySetting::get('mail_password'),
+                    ]);
+                }
+                $fromAddress = CompanySetting::get('mail_from_address');
+                if ($fromAddress) {
+                    config([
+                        'mail.from.address' => $fromAddress,
+                        'mail.from.name' => CompanySetting::get('mail_from_name', CompanySetting::get('company_name', config('app.name'))),
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignorer silencieusement si la base n'est pas encore initialisée
+        }
     }
 }

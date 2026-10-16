@@ -15,7 +15,7 @@ $defaultOrigins = (env('APP_ENV', 'production') === 'production')
         'capacitor://localhost',
     ];
 
-$envOrigins = env('CORS_ALLOWED_ORIGINS', env('FRONTEND_URL', ''));
+$envOrigins = 'http://localhost:3000';
 $configuredOrigins = array_filter(array_map('trim', explode(',', (string) $envOrigins)));
 
 $allowedOrigins = ! empty($configuredOrigins) ? $configuredOrigins : $defaultOrigins;
@@ -43,7 +43,7 @@ return [
         '#^http://127\.0\.0\.1(:\d+)?$#',
     ],
 
-    'allowed_headers' => ['Content-Type', 'X-Requested-With', 'Authorization', 'Accept', 'X-Sync-Secret', 'Origin'],
+    'allowed_headers' => ['*'],
 
     'exposed_headers' => ['Content-Disposition'],
 
