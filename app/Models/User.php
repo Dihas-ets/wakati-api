@@ -149,6 +149,11 @@ class User extends Authenticatable
         return $this->hasMany(KanbanTask::class, 'created_by');
     }
 
+    public function timeBreaks(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(TimeBreak::class);
+    }
+
     protected static function booted(): void
     {
         static::creating(function (User $user) {

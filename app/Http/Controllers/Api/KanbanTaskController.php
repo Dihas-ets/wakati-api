@@ -49,7 +49,7 @@ class KanbanTaskController extends Controller
 
         if ($request->boolean('grouped')) {
             return response()->json([
-                'todo' => $tasks->where('status', KanbanTask::STATUS_TODO)->values(),
+                'todo' => $tasks->whereIn('status', [KanbanTask::STATUS_TODO, KanbanTask::STATUS_INITIAL])->values(),
                 'in_progress' => $tasks->where('status', KanbanTask::STATUS_IN_PROGRESS)->values(),
                 'review' => $tasks->where('status', KanbanTask::STATUS_REVIEW)->values(),
                 'done' => $tasks->where('status', KanbanTask::STATUS_DONE)->values(),

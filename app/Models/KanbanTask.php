@@ -11,12 +11,14 @@ class KanbanTask extends Model
     use HasFactory;
 
     public const STATUS_TODO = 'todo';
+    public const STATUS_INITIAL = 'initial';
     public const STATUS_IN_PROGRESS = 'in_progress';
     public const STATUS_REVIEW = 'review';
     public const STATUS_DONE = 'done';
 
     public const STATUSES = [
         self::STATUS_TODO,
+        self::STATUS_INITIAL,
         self::STATUS_IN_PROGRESS,
         self::STATUS_REVIEW,
         self::STATUS_DONE,

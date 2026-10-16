@@ -84,8 +84,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('leaves', LeaveController::class)->except(['show']);
     Route::post('attendance/check-in', [AttendanceController::class, 'checkIn'])->middleware('throttle:scan');
     Route::post('attendance/check-out', [AttendanceController::class, 'checkOut'])->middleware('throttle:scan');
+
+    // --- Module Gestion des Pauses (Break Management) ---
     Route::post('attendance/break-start', [AttendanceController::class, 'startBreak'])->middleware('throttle:scan');
     Route::post('attendance/break-end', [AttendanceController::class, 'endBreak'])->middleware('throttle:scan');
+    Route::post('breaks/start', [AttendanceController::class, 'startBreak'])->middleware('throttle:scan');
+    Route::post('breaks/end', [AttendanceController::class, 'endBreak'])->middleware('throttle:scan');
+    Route::get('breaks/current', [AttendanceController::class, 'currentBreak']);
+
+    Route::prefix('v1')->group(function () {
+        Route::post('breaks/start', [AttendanceController::class, 'startBreak'])->middleware('throttle:scan');
+        Route::post('breaks/end', [AttendanceController::class, 'endBreak'])->middleware('throttle:scan');
+        Route::get('breaks/current', [AttendanceController::class, 'currentBreak']);
+    });
+
     Route::post('/employees/{user}/ensure-badge', [BadgeController::class, 'ensureBadge']);
 
     // --- Sécurité borne de pointage ---
