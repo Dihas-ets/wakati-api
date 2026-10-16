@@ -17,37 +17,12 @@ class EnsureRole
     {
         $user = $request->user();
 
-        if (! $user) {
+        if (! $user || ! in_array($user->role, $roles, true)) {
             return response()->json([
-                'message' => "Non authentifié.",
-            ], 401);
+                'message' => "Vous n'avez pas les droits pour accéder à cette ressource.",
+            ], 403);
         }
 
-        // Le super_admin a tous les droits d'administration
-        if ($user->isSuperAdmin()) {
-            return $next($request);
-        }
-
-        // Le company_admin a tous les droits d'administration pour son entreprise
-        if ($user->isCompanyAdmin() && (
-            in_array('company_admin', $roles, true) ||
-            in_array('branch_manager', $roles, true) ||
-            in_array('directeur', $roles, true) ||
-            in_array('hr_manager', $roles, true) ||
-            in_array('rh', $roles, true)
-        )) {
-            return $next($request);
-        }
-
-        // Vérifier si l'un des rôles demandés correspond au profil utilisateur
-        foreach ($roles as $role) {
-            if ($user->hasRole($role)) {
-                return $next($request);
-            }
-        }
-
-        return response()->json([
-            'message' => "Vous n'avez pas les droits pour accéder à cette ressource.",
-        ], 403);
+        return $next($request);
     }
 }

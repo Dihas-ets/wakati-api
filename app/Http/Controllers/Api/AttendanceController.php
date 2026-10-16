@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Attendance\CheckInRequest;
 use App\Http\Requests\Attendance\SyncOfflineRequest;
 use App\Models\Absence;
+use App\Models\ActivityLog;
 use App\Models\Attendance;
 use App\Models\BadgePairing;
 use App\Models\CompanySetting;
@@ -24,32 +25,12 @@ class AttendanceController extends Controller
      */
     public function index(Request $request)
     {
-        $currentUser = $request->user();
+        $query = Attendance::query();
 
-        $query = Attendance::query()
-            ->with([
-                'user:id,name,email,role,job_title,branch_id',
-                'branch:id,name,code',
-            ]);
-
-        // Cloisonnement Entreprise
-        if (! $currentUser->isSuperAdmin()) {
-            $query->where('company_id', $currentUser->company_id);
-        } elseif ($request->filled('company_id')) {
-            $query->where('company_id', $request->integer('company_id'));
-        }
-
-        // Cloisonnement Agence
-        if ($currentUser->isEmployee()) {
-            $query->where('user_id', $currentUser->id);
-        } elseif ($currentUser->isBranchManager() || $currentUser->isHrManager()) {
-            $query->where('branch_id', $currentUser->branch_id);
-        } elseif ($request->filled('branch_id')) {
-            $query->where('branch_id', $request->integer('branch_id'));
-        }
-
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->integer('user_id'));
+        if (in_array($request->user()->role, ['employe', 'comptable'])) {
+            $query->where('user_id', $request->user()->id);
+        } elseif ($request->has('user_id')) {
+            $query->where('user_id', $request->user_id);
         }
 
         if ($request->has('from')) {
@@ -61,7 +42,7 @@ class AttendanceController extends Controller
         }
 
         return response()->json(
-            $query->orderBy('date', 'desc')->orderBy('check_in_time', 'desc')->get()
+            $query->with('user:id,name,email')->get()
         );
     }
 
@@ -208,16 +189,152 @@ class AttendanceController extends Controller
                 'message' => "Vous avez déjà pointé votre départ aujourd'hui.",
             ], 422);
         }
+        
+        // Grade-fou anti-erreur : un depart pointé après l'arrivée est
+        // quasi toujours accidentel (double tap, requete rejouée, appli rechargéé)
+
+        $minDelayMinutes = max(0, (int) CompanySetting::get('min_checkout_delay_minutes', 5));
+        if ($minDelayMinutes > 0) {
+            $earliestCheckOut = $attendance->check_in_time->copy()->addMinutes($minDelayMinutes);
+            $remainingSeconds = $earliestCheckOut->getTimestamp() - $now->getTimestamp();
+
+            if ($remainingSeconds > 0) {
+                $remainingMinutes = max(1, (int) ceil($remainingSeconds / 60));
+
+                return response()->json([
+                    'message' => "Départ refusé: vous venez de pointer votre attivée. "
+                         ."Réessayez dasn {$remainingMinutes} minute(s) si ce départ est voulu. ",
+                ], 422);
+            }
+        }
+
+         // Si l'employé était encore en pause lors du départ, clôturer la pause
+        $updateData = ['check_out_time' => $now];
+        if ($attendance->is_on_break && $attendance->current_break_start) {
+            $start = $attendance->current_break_start;
+            $durationMinutes = max(1, (int) $start->diffInMinutes($now));
+            $history = $attendance->break_history ?? [];
+            $history[] = [
+                'start' => $start->format('H:i:s'),
+                'end' => $now->format('H:i:s'),
+                'duration_minutes' => $durationMinutes,
+            ];
+            $updateData['is_on_break'] = false;
+            $updateData['current_break_start'] = null;
+            $updateData['total_break_minutes'] = (int) $attendance->total_break_minutes + $durationMinutes;
+            $updateData['break_history'] = $history;
+        }
 
         // Ne pas écraser le statut de ponctualité (late / on_time) :
         // la fin de journée est indiquée par check_out_time uniquement.
-        $attendance->update([
-            'check_out_time' => $now,
-        ]);
+        $attendance->update($updateData);
 
         return response()->json([
             'message' => 'Départ pointé avec succès.',
-            'attendance' => $attendance,
+            'attendance' => $attendance->fresh(),
+        ]);
+    }
+
+    /**
+     * POST /api/attendance/break-start
+     * Démarre une session de pause pour l'employé connecté.
+     */
+    public function startBreak(Request $request)
+    {
+        $user = $request->user();
+        $now = Carbon::now(CompanySetting::get('timezone', config('app.timezone')));
+        $today = $now->toDateString();
+
+        $attendance = Attendance::where('user_id', $user->id)
+            ->whereDate('date', $today)
+            ->first();
+
+        if (! $attendance) {
+            return response()->json([
+                'message' => "Vous n'avez pas encore pointé votre arrivée aujourd'hui.",
+            ], 422);
+        }
+
+        if ($attendance->check_out_time) {
+            return response()->json([
+                'message' => "Votre journée est déjà terminée (départ déjà pointé).",
+            ], 422);
+        }
+
+        if ($attendance->is_on_break) {
+            return response()->json([
+                'message' => "Vous êtes déjà en pause.",
+                'attendance' => $attendance,
+            ], 422);
+        }
+
+        $attendance->update([
+            'is_on_break' => true,
+            'current_break_start' => $now,
+        ]);
+
+        ActivityLog::record($request, 'attendance.break_start', $attendance, [
+            'break_start' => $now->toDateTimeString(),
+        ]);
+
+        return response()->json([
+            'message' => 'Pause commencée. Bon repos !',
+            'attendance' => $attendance->fresh(),
+        ]);
+    }
+
+    /**
+     * POST /api/attendance/break-end
+     * Termine la session de pause en cours et cumule la durée.
+     */
+    public function endBreak(Request $request)
+    {
+        $user = $request->user();
+        $now = Carbon::now(CompanySetting::get('timezone', config('app.timezone')));
+        $today = $now->toDateString();
+
+        $attendance = Attendance::where('user_id', $user->id)
+            ->whereDate('date', $today)
+            ->first();
+
+        if (! $attendance) {
+            return response()->json([
+                'message' => "Vous n'avez pas encore pointé votre arrivée aujourd'hui.",
+            ], 422);
+        }
+
+        if (! $attendance->is_on_break) {
+            return response()->json([
+                'message' => "Vous n'êtes pas en pause actuellement.",
+                'attendance' => $attendance,
+            ], 422);
+        }
+
+        $start = $attendance->current_break_start ?? $now;
+        $durationMinutes = max(1, (int) $start->diffInMinutes($now));
+        $history = $attendance->break_history ?? [];
+        $history[] = [
+            'start' => $start->format('H:i:s'),
+            'end' => $now->format('H:i:s'),
+            'duration_minutes' => $durationMinutes,
+        ];
+        $totalMinutes = (int) $attendance->total_break_minutes + $durationMinutes;
+
+        $attendance->update([
+            'is_on_break' => false,
+            'current_break_start' => null,
+            'total_break_minutes' => $totalMinutes,
+            'break_history' => $history,
+        ]);
+
+        ActivityLog::record($request, 'attendance.break_end', $attendance, [
+            'duration_minutes' => $durationMinutes,
+            'total_break_minutes' => $totalMinutes,
+        ]);
+
+        return response()->json([
+            'message' => "Fin de pause enregistrée (durée : {$durationMinutes} min). Bon retour au travail !",
+            'attendance' => $attendance->fresh(),
         ]);
     }
 
@@ -385,15 +502,12 @@ class AttendanceController extends Controller
         }
 
         return Attendance::create([
-            'company_id' => $user?->company_id,
-            'branch_id' => $user?->branch_id,
             'user_id' => $userId,
             'schedule_id' => $scheduleId,
             'work_pattern_id' => $workPatternId,
             'date' => $timestamp->toDateString(),
             'check_in_time' => $timestamp,
             'status' => $status,
-            'clock_in_mode' => $source,
             'ip_address' => $ip,
             'source' => $source,
             'latitude' => $latitude,
