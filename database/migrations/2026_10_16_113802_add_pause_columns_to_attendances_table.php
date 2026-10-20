@@ -12,8 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('attendances', function (Blueprint $table) {
-            $table->timestamp('pause_start')->nullable()->after('pointage_arrivée');
-            $table->timestamp('pause_end')->nullable()->after('pause_start');
+            if (!Schema::hasColumn('attendances', 'pause_start')) {
+                $table->timestamp('pause_start')->nullable()->after('check_in_time');
+            }
+            if (!Schema::hasColumn('attendances', 'pause_end')) {
+                $table->timestamp('pause_end')->nullable()->after('pause_start');
+            }
         });
     }
 
@@ -23,7 +27,16 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('attendances', function (Blueprint $table) {
-            $table->dropColumn(['pause_start', 'pause_end']);
+            $columns = [];
+            if (Schema::hasColumn('attendances', 'pause_end')) {
+                $columns[] = 'pause_end';
+            }
+            if (Schema::hasColumn('attendances', 'pause_start')) {
+                $columns[] = 'pause_start';
+            }
+            if (!empty($columns)) {
+                $table->dropColumn($columns);
+            }
         });
     }
 };
