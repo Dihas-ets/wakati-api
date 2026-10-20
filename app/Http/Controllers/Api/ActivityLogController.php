@@ -8,10 +8,7 @@ use Illuminate\Http\Request;
 
 class ActivityLogController extends Controller
 {
-    /**
-     * GET /api/activity-logs?action=&subject_type=
-     * Réservé directeur (voir routes/api.php).
-     */
+    
     public function index(Request $request)
     {
         $query = ActivityLog::with('user:id,name,email')->orderBy('created_at', 'desc');
