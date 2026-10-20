@@ -27,6 +27,8 @@ class Meeting extends Model
     ];
 
     protected $fillable = [
+        'company_id',
+        'agency_id',
         'title',
         'date',
         'time',
@@ -49,6 +51,16 @@ class Meeting extends Model
         return [
             'date' => 'date:Y-m-d',
         ];
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class);
     }
 
     public function redactor(): BelongsTo

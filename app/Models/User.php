@@ -14,12 +14,21 @@ class User extends Authenticatable
     /**
      * Rôles disponibles dans l'application.
      */
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+    public const ROLE_COMPANY_ADMIN = 'company_admin';
+    public const ROLE_MANAGER = 'manager';
+    public const ROLE_EMPLOYEE = 'employee';
+
     public const ROLE_RH = 'rh';
     public const ROLE_COMPTABLE = 'comptable';
     public const ROLE_DIRECTEUR = 'directeur';
     public const ROLE_EMPLOYE = 'employe';
 
     public const ROLES = [
+        self::ROLE_SUPER_ADMIN,
+        self::ROLE_COMPANY_ADMIN,
+        self::ROLE_MANAGER,
+        self::ROLE_EMPLOYEE,
         self::ROLE_RH,
         self::ROLE_COMPTABLE,
         self::ROLE_DIRECTEUR,
@@ -40,6 +49,8 @@ class User extends Authenticatable
     ];
 
     protected $fillable = [
+        'company_id',
+        'agency_id',
         'name',
         'email',
         'password',
@@ -65,14 +76,49 @@ class User extends Authenticatable
         ];
     }
 
+    public function company(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function agency(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Agency::class);
+    }
+
     public function department(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Department::class);
     }
 
+    public function attendances(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Attendance::class);
+    }
+
     public function hasRole(string $role): bool
     {
         return $this->role === $role;
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === self::ROLE_SUPER_ADMIN;
+    }
+
+    public function isCompanyAdmin(): bool
+    {
+        return $this->role === self::ROLE_COMPANY_ADMIN;
+    }
+
+    public function isManager(): bool
+    {
+        return $this->role === self::ROLE_MANAGER;
+    }
+
+    public function isEmployee(): bool
+    {
+        return in_array($this->role, [self::ROLE_EMPLOYEE, self::ROLE_EMPLOYE], true);
     }
 
     /**

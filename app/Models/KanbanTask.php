@@ -25,6 +25,8 @@ class KanbanTask extends Model
     ];
 
     protected $fillable = [
+        'company_id',
+        'agency_id',
         'meeting_id',
         'meeting_topic_id',
         'title',
@@ -42,6 +44,16 @@ class KanbanTask extends Model
             'start_date' => 'date',
             'due_date' => 'date',
         ];
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class);
     }
 
     public function meeting(): BelongsTo

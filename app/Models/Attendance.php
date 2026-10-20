@@ -9,7 +9,7 @@ class Attendance extends Model
 {
 
     protected $fillable = [
-        'user_id', 'schedule_id', 'work_pattern_id', 'date', 'check_in_time', 'check_out_time',
+        'company_id', 'agency_id', 'user_id', 'schedule_id', 'work_pattern_id', 'date', 'check_in_time', 'check_out_time',
         'is_on_break', 'current_break_start', 'total_break_minutes', 'break_history',
         'status', 'ip_address', 'source', 'latitude', 'longitude', 'pause_start', 'pause_end', 'sync_uuid',
     ];
@@ -30,6 +30,16 @@ class Attendance extends Model
             'total_break_minutes' => 'integer',
             'break_history' => 'array',
         ];
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class);
     }
 
     public function user(): BelongsTo
