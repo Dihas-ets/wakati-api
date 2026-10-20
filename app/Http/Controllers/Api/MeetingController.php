@@ -66,9 +66,14 @@ class MeetingController extends Controller
         }
 
         $meetings = $query->orderBy('date', 'desc')->orderBy('time', 'desc')->get();
+        $canViewDrhNotes = in_array($user->role, [User::ROLE_RH, User::ROLE_DIRECTEUR], true);
 
-        // Enrichir chaque réunion avec la participation de l'utilisateur connecté
-        $meetings->each(function (Meeting $m) use ($user) {
+        // Enrichir chaque réunion avec la participation de l'utilisateur connecté et masquer les notes DRH
+        $meetings->each(function (Meeting $m) use ($user, $canViewDrhNotes) {
+            if (! $canViewDrhNotes) {
+                $m->drh_notes = null;
+                $m->makeHidden('drh_notes');
+            }
             $participant = $m->meetingParticipants->firstWhere('user_id', $user->id);
             $m->current_user_participant = $participant;
             $m->can_self_check_in = $m->isSelfCheckInAllowed() && $participant && $participant->attendance_status !== MeetingParticipant::STATUS_PRESENT;
@@ -95,7 +100,13 @@ class MeetingController extends Controller
             ->orderBy('time', 'asc')
             ->get();
 
-        $meetings->each(function (Meeting $m) use ($user) {
+        $canViewDrhNotes = in_array($user->role, [User::ROLE_RH, User::ROLE_DIRECTEUR], true);
+
+        $meetings->each(function (Meeting $m) use ($user, $canViewDrhNotes) {
+            if (! $canViewDrhNotes) {
+                $m->drh_notes = null;
+                $m->makeHidden('drh_notes');
+            }
             $participant = $m->meetingParticipants->firstWhere('user_id', $user->id);
             $m->current_user_participant = $participant;
             $m->can_self_check_in = $m->isSelfCheckInAllowed() && $participant && $participant->attendance_status !== MeetingParticipant::STATUS_PRESENT;
@@ -113,6 +124,12 @@ class MeetingController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        if (! $request->user()->can('create', Meeting::class)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Seuls les administrateurs et la Direction peuvent programmer une réunion.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'date' => 'required|date',
@@ -209,6 +226,12 @@ class MeetingController extends Controller
     {
         $user = $request->user();
 
+        if (! $user->can('view', $meeting)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Vous n\'êtes pas autorisé à consulter cette réunion.',
+            ], 403);
+        }
+
         $meeting->load([
             'redactor:id,name,email,job_title',
             'meetingParticipants.user:id,name,email,job_title,card_uid',
@@ -216,6 +239,11 @@ class MeetingController extends Controller
             'kanbanTasks.assignedUser:id,name,email',
             'validations.user:id,name,role',
         ]);
+
+        if (! in_array($user->role, [User::ROLE_RH, User::ROLE_DIRECTEUR], true)) {
+            $meeting->drh_notes = null;
+            $meeting->makeHidden('drh_notes');
+        }
 
         $participant = $meeting->meetingParticipants->firstWhere('user_id', $user->id);
         $meeting->current_user_participant = $participant;
@@ -229,6 +257,12 @@ class MeetingController extends Controller
      */
     public function update(Request $request, Meeting $meeting): JsonResponse
     {
+        if (! $request->user()->can('update', $meeting)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Vous ne pouvez pas modifier cette réunion.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
             'date' => 'sometimes|required|date',
@@ -239,6 +273,10 @@ class MeetingController extends Controller
             'drh_notes' => 'nullable|string',
             'status' => ['nullable', Rule::in(Meeting::STATUSES)],
         ]);
+
+        if (! in_array($request->user()->role, [User::ROLE_RH, User::ROLE_DIRECTEUR], true)) {
+            unset($validated['drh_notes']);
+        }
 
         $meeting->update($validated);
 
@@ -256,6 +294,12 @@ class MeetingController extends Controller
      */
     public function startLiveSession(Meeting $meeting): JsonResponse
     {
+        if (! request()->user()->can('pilotLive', $meeting)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Seul l\'animateur ou la Direction peut piloter le Mode Live.',
+            ], 403);
+        }
+
         $meeting->update(['status' => Meeting::STATUS_ONGOING]);
 
         return response()->json([
@@ -275,6 +319,12 @@ class MeetingController extends Controller
      */
     public function pauseLiveSession(Meeting $meeting): JsonResponse
     {
+        if (! request()->user()->can('pilotLive', $meeting)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Seul l\'animateur ou la Direction peut suspendre le direct.',
+            ], 403);
+        }
+
         $meeting->update(['status' => Meeting::STATUS_CONVOKED]);
 
         return response()->json([
@@ -294,6 +344,11 @@ class MeetingController extends Controller
      */
     public function destroy(Meeting $meeting): JsonResponse
     {
+        if (! request()->user()->can('delete', $meeting)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Vous ne pouvez pas supprimer cette réunion.',
+            ], 403);
+        }
         if ($meeting->docx_file_path) {
             $fullPath = storage_path('app/' . $meeting->docx_file_path);
             if (File::exists($fullPath)) {
@@ -377,6 +432,12 @@ class MeetingController extends Controller
      */
     public function addTopic(Request $request, Meeting $meeting): JsonResponse
     {
+        if (! $request->user()->can('manageTopics', $meeting)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Seul l\'animateur ou la Direction peut ajouter des points à l\'ordre du jour.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'subject' => 'required|string|max:255',
             'current_situation' => 'nullable|string',
@@ -395,6 +456,12 @@ class MeetingController extends Controller
      */
     public function convertTopicToTask(Request $request, Meeting $meeting, MeetingTopic $topic): JsonResponse
     {
+        if (! $request->user()->can('manageTopics', $meeting)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Seul l\'animateur ou la Direction peut convertir des sujets en tâches Kanban.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'title' => 'nullable|string|max:255',
             'description' => 'nullable|string',
@@ -422,6 +489,12 @@ class MeetingController extends Controller
      */
     public function generateDocx(Request $request, Meeting $meeting): JsonResponse
     {
+        if (! $request->user()->can('downloadDocx', $meeting)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Les collaborateurs invités ne peuvent pas générer la fiche Word officielle.',
+            ], 403);
+        }
+
         $filePath = $this->docxGeneratorService->generate($meeting);
         $meeting->refresh();
 
@@ -466,6 +539,10 @@ class MeetingController extends Controller
 
         if (! $user) {
             abort(401, 'Non authentifié pour télécharger ce document.');
+        }
+
+        if (! $user->can('downloadDocx', $meeting)) {
+            abort(403, 'Action non autorisée. Les collaborateurs invités ne sont pas autorisés à télécharger la fiche Word officielle.');
         }
 
         if (! $meeting->docx_file_path || ! File::exists(storage_path('app/' . $meeting->docx_file_path))) {
@@ -514,6 +591,12 @@ class MeetingController extends Controller
      */
     public function closeAndSendReports(Meeting $meeting): JsonResponse
     {
+        if (! request()->user()->can('pilotLive', $meeting)) {
+            return response()->json([
+                'message' => 'Action non autorisée. Seul l\'animateur ou la Direction peut clôturer la réunion.',
+            ], 403);
+        }
+
         return DB::transaction(function () use ($meeting) {
             // 1. Clôture du statut
             $meeting->update(['status' => Meeting::STATUS_COMPLETED]);

@@ -12,6 +12,7 @@ use App\Models\BadgePairing;
 use App\Models\CompanySetting;
 use App\Models\Leave;
 use App\Models\Schedule;
+use App\Models\TimeBreak;
 use App\Models\User;
 use App\Models\WorkPattern;
 use Carbon\Carbon;
@@ -202,17 +203,32 @@ class AttendanceController extends Controller
                 $remainingMinutes = max(1, (int) ceil($remainingSeconds / 60));
 
                 return response()->json([
-                    'message' => "Départ refusé: vous venez de pointer votre attivée. "
-                         ."Réessayez dasn {$remainingMinutes} minute(s) si ce départ est voulu. ",
+                    'message' => "Départ refusé: vous venez de pointer votre arrivée. "
+                         ."Réessayez dans {$remainingMinutes} minute(s) si ce départ est voulu.",
                 ], 422);
             }
         }
 
-         // Si l'employé était encore en pause lors du départ, clôturer la pause
+        // Si l'employé était encore en pause lors du départ, clôturer la pause
         $updateData = ['check_out_time' => $now];
         if ($attendance->is_on_break && $attendance->current_break_start) {
             $start = $attendance->current_break_start;
             $durationMinutes = max(1, (int) $start->diffInMinutes($now));
+
+            // Clôture dans la table time_breaks
+            $activeBreak = TimeBreak::where('user_id', $user->id)
+                ->whereDate('date', $today)
+                ->whereNull('break_end')
+                ->latest()
+                ->first();
+            if ($activeBreak) {
+                $activeBreak->update([
+                    'break_start' => $start,
+                    'break_end' => $now,
+                    'duration_minutes' => $durationMinutes,
+                ]);
+            }
+
             $history = $attendance->break_history ?? [];
             $history[] = [
                 'start' => $start->format('H:i:s'),
@@ -236,7 +252,7 @@ class AttendanceController extends Controller
     }
 
     /**
-     * POST /api/attendance/break-start
+     * POST /api/v1/breaks/start ou /api/attendance/break-start
      * Démarre une session de pause pour l'employé connecté.
      */
     public function startBreak(Request $request)
@@ -268,23 +284,38 @@ class AttendanceController extends Controller
             ], 422);
         }
 
+        $breakType = $request->input('break_type', TimeBreak::TYPE_LUNCH);
+        if (! in_array($breakType, TimeBreak::TYPES)) {
+            $breakType = TimeBreak::TYPE_LUNCH;
+        }
+
+        $timeBreak = TimeBreak::create([
+            'user_id' => $user->id,
+            'date' => $today,
+            'break_start' => $now,
+            'break_type' => $breakType,
+        ]);
+
         $attendance->update([
             'is_on_break' => true,
             'current_break_start' => $now,
         ]);
 
         ActivityLog::record($request, 'attendance.break_start', $attendance, [
+            'break_id' => $timeBreak->id,
+            'break_type' => $breakType,
             'break_start' => $now->toDateTimeString(),
         ]);
 
         return response()->json([
             'message' => 'Pause commencée. Bon repos !',
+            'time_break' => $timeBreak,
             'attendance' => $attendance->fresh(),
         ]);
     }
 
     /**
-     * POST /api/attendance/break-end
+     * POST /api/v1/breaks/end ou /api/attendance/break-end
      * Termine la session de pause en cours et cumule la durée.
      */
     public function endBreak(Request $request)
@@ -310,8 +341,23 @@ class AttendanceController extends Controller
             ], 422);
         }
 
-        $start = $attendance->current_break_start ?? $now;
+        $activeBreak = TimeBreak::where('user_id', $user->id)
+            ->whereDate('date', $today)
+            ->whereNull('break_end')
+            ->latest()
+            ->first();
+
+        $start = $attendance->current_break_start ?? $activeBreak?->break_start ?? $now;
         $durationMinutes = max(1, (int) $start->diffInMinutes($now));
+
+        if ($activeBreak) {
+            $activeBreak->update([
+                'break_start' => $start,
+                'break_end' => $now,
+                'duration_minutes' => $durationMinutes,
+            ]);
+        }
+
         $history = $attendance->break_history ?? [];
         $history[] = [
             'start' => $start->format('H:i:s'),
@@ -334,7 +380,45 @@ class AttendanceController extends Controller
 
         return response()->json([
             'message' => "Fin de pause enregistrée (durée : {$durationMinutes} min). Bon retour au travail !",
+            'time_break' => $activeBreak ? $activeBreak->fresh() : null,
             'attendance' => $attendance->fresh(),
+        ]);
+    }
+
+    /**
+     * GET /api/v1/breaks/current ou /api/breaks/current
+     * Récupère l'état de pause actuel de l'utilisateur connecté pour aujourd'hui.
+     */
+    public function currentBreak(Request $request)
+    {
+        $user = $request->user();
+        $now = Carbon::now(CompanySetting::get('timezone', config('app.timezone')));
+        $today = $now->toDateString();
+
+        $attendance = Attendance::where('user_id', $user->id)
+            ->whereDate('date', $today)
+            ->first();
+
+        $activeBreak = TimeBreak::where('user_id', $user->id)
+            ->whereDate('date', $today)
+            ->whereNull('break_end')
+            ->latest()
+            ->first();
+
+        $todayBreaks = TimeBreak::where('user_id', $user->id)
+            ->whereDate('date', $today)
+            ->orderBy('break_start', 'asc')
+            ->get();
+
+        return response()->json([
+            'has_checked_in' => (bool) $attendance,
+            'is_on_break' => (bool) ($attendance?->is_on_break),
+            'active_break' => $activeBreak,
+            'current_break_start' => $attendance?->current_break_start,
+            'total_break_minutes' => (int) ($attendance?->total_break_minutes ?? 0),
+            'effective_work_minutes' => $attendance?->effective_work_minutes ?? 0,
+            'effective_work_duration' => $attendance?->effective_work_duration ?? '0h 00m',
+            'today_breaks' => $todayBreaks,
         ]);
     }
 
