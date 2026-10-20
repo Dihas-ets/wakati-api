@@ -19,10 +19,17 @@ use App\Http\Controllers\Api\KioskHeartbeatController;
 use App\Http\Controllers\Api\KioskSecurityController;
 use App\Http\Controllers\Api\MeetingController;
 use App\Http\Controllers\Api\KanbanTaskController;
+use App\Http\Controllers\Api\TenantRegistrationController;
+use App\Http\Controllers\Api\PlanController;
+use App\Http\Controllers\Api\CompanyProfileController;
+use App\Http\Controllers\Api\SuperAdminController;
 use Illuminate\Support\Facades\Route;
 
-// --- Authentification (publique avec anti-brute force strict) ---
+// --- Forfaits publics & Inscription Tenant (publique) ---
+Route::get('/plans', [PlanController::class, 'index'])->name('plans.index');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login')->name('login');
+Route::post('/register-tenant', [TenantRegistrationController::class, 'registerCompany'])->name('register-tenant');
+Route::post('/register-company', [TenantRegistrationController::class, 'registerCompany'])->name('register-company');
 
 // --- Synchronisation hors-ligne & Heartbeat borne (secret partagé / session admin) ---
 Route::middleware('offline-sync')->group(function () {
@@ -120,4 +127,28 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- Module Suivi Tâches Kanban ---
     Route::patch('/kanban-tasks/{kanban_task}/status', [KanbanTaskController::class, 'updateStatus']);
     Route::apiResource('kanban-tasks', KanbanTaskController::class);
+
+    // --- Gestion du profil entreprise & abonnements (Company Admin) ---
+    Route::get('/company/profile', [CompanyProfileController::class, 'profile']);
+    Route::put('/company/profile', [CompanyProfileController::class, 'updateProfile']);
+    Route::get('/company/subscription', [CompanyProfileController::class, 'subscription']);
+    Route::post('/company/subscription/change', [CompanyProfileController::class, 'changeSubscription']);
+    Route::get('/company/payments', [CompanyProfileController::class, 'payments']);
+
+    // --- Espace Super-Admin (Gestion Plateforme SaaS) ---
+    Route::middleware('role:super_admin')->prefix('super-admin')->group(function () {
+        Route::get('/stats', [SuperAdminController::class, 'stats']);
+        Route::get('/companies', [SuperAdminController::class, 'companies']);
+        Route::get('/companies/{company}', [SuperAdminController::class, 'companyDetails']);
+        Route::patch('/companies/{company}/access', [SuperAdminController::class, 'updateAccess']);
+        Route::put('/companies/{company}', [SuperAdminController::class, 'updateCompany']);
+        Route::post('/companies/{company}/subscriptions', [SuperAdminController::class, 'assignSubscription']);
+        Route::get('/plans', [SuperAdminController::class, 'plans']);
+        Route::post('/plans', [SuperAdminController::class, 'createPlan']);
+        Route::put('/plans/{plan}', [SuperAdminController::class, 'updatePlan']);
+        Route::delete('/plans/{plan}', [SuperAdminController::class, 'deletePlan']);
+        Route::get('/payments', [SuperAdminController::class, 'payments']);
+        Route::post('/payments', [SuperAdminController::class, 'storePayment']);
+        Route::get('/histories', [SuperAdminController::class, 'histories']);
+    });
 });

@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Attendance extends Model
 {
+    use BelongsToTenant;
 
     protected $fillable = [
         'company_id', 'agency_id', 'user_id', 'schedule_id', 'work_pattern_id', 'date', 'check_in_time', 'check_out_time',

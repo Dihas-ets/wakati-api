@@ -11,12 +11,34 @@ class Company extends Model
 {
     use HasFactory;
 
+    public const ACCESS_TYPE_SUBSCRIPTION = 'subscription';
+    public const ACCESS_TYPE_FREE_GRANT = 'free_grant';
+
+    public const STATUS_ACTIVE = 'active';
+    public const STATUS_TRIAL = 'trial';
+    public const STATUS_EXPIRED = 'expired';
+    public const STATUS_SUSPENDED = 'suspended';
+
     protected $fillable = [
         'name',
+        'slug',
         'logo',
         'phone',
+        'email',
+        'address',
+        'website',
         'rccm_ifu',
+        'access_type',
+        'status',
+        'has_used_trial',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'has_used_trial' => 'boolean',
+        ];
+    }
 
     public function agencies(): HasMany
     {
@@ -31,6 +53,16 @@ class Company extends Model
     public function currentSubscription(): HasOne
     {
         return $this->hasOne(Subscription::class)->latestOfMany();
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function histories(): HasMany
+    {
+        return $this->hasMany(CompanyHistory::class);
     }
 
     public function users(): HasMany
@@ -51,5 +83,22 @@ class Company extends Model
     public function kanbanTasks(): HasMany
     {
         return $this->hasMany(KanbanTask::class);
+    }
+
+    /**
+     * Vérifie si l'entreprise dispose d'un accès actif :
+     * Soit via gratuité accordée par le super-admin (free_grant),
+     * Soit via un abonnement actif en cours de validité.
+     */
+    public function hasValidAccess(): bool
+    {
+        if ($this->access_type === self::ACCESS_TYPE_FREE_GRANT) {
+            return $this->status === self::STATUS_ACTIVE;
+        }
+
+        return $this->subscriptions()
+            ->where('status', Subscription::STATUS_ACTIVE)
+            ->where('end_date', '>=', now())
+            ->exists();
     }
 }

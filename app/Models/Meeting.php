@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToTenant;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Meeting extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToTenant;
 
     public const STATUS_DRAFT = 'draft';
     public const STATUS_CONVOKED = 'convoked';

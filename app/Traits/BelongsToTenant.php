@@ -2,9 +2,12 @@
 
 namespace App\Traits;
 
+use App\Models\Agency;
+use App\Models\Company;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 trait BelongsToTenant
 {
@@ -82,5 +85,15 @@ trait BelongsToTenant
                 }
             }
         });
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class);
     }
 }
