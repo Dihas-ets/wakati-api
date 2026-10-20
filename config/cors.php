@@ -1,7 +1,7 @@
 <?php
 
 $defaultOrigins = (env('APP_ENV', 'production') === 'production')
-    ? ['https://wakati-web.vercel.app', 'https://wakatti-web.vercel.app']
+    ? ['https://wakati.dihas.tech', 'https://wakatti-web.vercel.app']
     : [
         'http://localhost:3000',
         'http://127.0.0.1:3000',
@@ -15,7 +15,7 @@ $defaultOrigins = (env('APP_ENV', 'production') === 'production')
         'capacitor://localhost',
     ];
 
-$envOrigins = 'http://localhost:3000';
+$envOrigins = env('CORS_ALLOWED_ORIGINS');
 $configuredOrigins = array_filter(array_map('trim', explode(',', (string) $envOrigins)));
 
 $allowedOrigins = ! empty($configuredOrigins) ? $configuredOrigins : $defaultOrigins;
