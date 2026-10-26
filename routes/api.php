@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\KanbanTaskController;
 use App\Http\Controllers\Api\TenantRegistrationController;
 use App\Http\Controllers\Api\PlanController;
 use App\Http\Controllers\Api\CompanyProfileController;
+use App\Http\Controllers\Api\AgencyController;
 use App\Http\Controllers\Api\SuperAdminController;
 use Illuminate\Support\Facades\Route;
 
@@ -128,11 +129,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/kanban-tasks/{kanban_task}/status', [KanbanTaskController::class, 'updateStatus']);
     Route::apiResource('kanban-tasks', KanbanTaskController::class);
 
+    // --- Gestion Multi-Agences (Branches) ---
+    Route::post('/branches/{agency}/assign-manager', [AgencyController::class, 'assignManager']);
+    Route::post('/agencies/{agency}/assign-manager', [AgencyController::class, 'assignManager']);
+    Route::apiResource('branches', AgencyController::class)->parameters(['branches' => 'agency']);
+    Route::apiResource('agencies', AgencyController::class)->parameters(['agencies' => 'agency']);
+
     // --- Gestion du profil entreprise & abonnements (Company Admin) ---
     Route::get('/company/profile', [CompanyProfileController::class, 'profile']);
     Route::put('/company/profile', [CompanyProfileController::class, 'updateProfile']);
     Route::get('/company/subscription', [CompanyProfileController::class, 'subscription']);
     Route::post('/company/subscription/change', [CompanyProfileController::class, 'changeSubscription']);
+    Route::post('/company/subscription/pay', [CompanyProfileController::class, 'paySubscription']);
     Route::get('/company/payments', [CompanyProfileController::class, 'payments']);
 
     // --- Espace Super-Admin (Gestion Plateforme SaaS) ---
@@ -150,5 +158,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/payments', [SuperAdminController::class, 'payments']);
         Route::post('/payments', [SuperAdminController::class, 'storePayment']);
         Route::get('/histories', [SuperAdminController::class, 'histories']);
+        Route::get('/subscriptions', [SuperAdminController::class, 'subscriptions']);
+        Route::put('/subscriptions/{subscription}', [SuperAdminController::class, 'updateSubscription']);
+        Route::get('/settings', [SuperAdminController::class, 'settings']);
+        Route::put('/settings', [SuperAdminController::class, 'updateSettings']);
     });
 });

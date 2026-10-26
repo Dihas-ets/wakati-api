@@ -112,6 +112,11 @@ class User extends Authenticatable
         return $this->role === self::ROLE_COMPANY_ADMIN;
     }
 
+    public function isAdmin(): bool
+    {
+        return in_array($this->role, [self::ROLE_SUPER_ADMIN, self::ROLE_COMPANY_ADMIN, self::ROLE_DIRECTEUR], true);
+    }
+
     public function isManager(): bool
     {
         return $this->role === self::ROLE_MANAGER;

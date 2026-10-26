@@ -12,7 +12,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('company_id')->constrained('companies')->cascadeOnDelete();
             $table->string('name');
+            $table->string('code')->nullable();
             $table->string('address')->nullable();
+            $table->string('phone')->nullable();
+            $table->string('timezone')->default('Africa/Porto-Novo');
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }

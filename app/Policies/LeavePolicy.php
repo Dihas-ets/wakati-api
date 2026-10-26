@@ -7,6 +7,15 @@ use App\Models\User;
 
 class LeavePolicy
 {
+    public function before(User $user, string $ability): ?bool
+    {
+        if (in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN], true)) {
+            return true;
+        }
+
+        return null;
+    }
+
     public function viewAny(User $user): bool
     {
         return true;
@@ -14,7 +23,7 @@ class LeavePolicy
 
     public function view(User $user, Leave $leave): bool
     {
-        if (in_array($user->role, ['rh', 'directeur'])) {
+        if (in_array($user->role, ['rh', 'directeur', 'company_admin', 'super_admin'])) {
             return true;
         }
 
@@ -27,17 +36,17 @@ class LeavePolicy
      */
     public function create(User $user): bool
     {
-        return in_array($user->role, ['rh', 'directeur', 'employe', 'comptable']);
+        return in_array($user->role, ['rh', 'directeur', 'company_admin', 'super_admin', 'employe', 'comptable']);
     }
 
     public function update(User $user, Leave $leave): bool
     {
-        return in_array($user->role, ['rh', 'directeur']);
+        return in_array($user->role, ['rh', 'directeur', 'company_admin', 'super_admin']);
     }
 
     public function delete(User $user, Leave $leave): bool
     {
-        if (in_array($user->role, ['rh', 'directeur'])) {
+        if (in_array($user->role, ['rh', 'directeur', 'company_admin', 'super_admin'])) {
             return true;
         }
 
@@ -47,6 +56,6 @@ class LeavePolicy
 
     public function decide(User $user, Leave $leave): bool
     {
-        return in_array($user->role, ['rh', 'directeur']);
+        return in_array($user->role, ['rh', 'directeur', 'company_admin', 'super_admin']);
     }
 }

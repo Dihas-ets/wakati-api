@@ -23,6 +23,9 @@ class Company extends Model
         'name',
         'slug',
         'logo',
+        'secondary_logo',
+        'primary_color',
+        'secondary_color',
         'phone',
         'email',
         'address',
@@ -32,6 +35,20 @@ class Company extends Model
         'status',
         'has_used_trial',
     ];
+
+    protected $appends = [
+        'primary_logo',
+    ];
+
+    public function getPrimaryLogoAttribute(): ?string
+    {
+        return $this->logo;
+    }
+
+    public function setPrimaryLogoAttribute(?string $value): void
+    {
+        $this->attributes['logo'] = $value;
+    }
 
     protected function casts(): array
     {
@@ -53,6 +70,16 @@ class Company extends Model
     public function currentSubscription(): HasOne
     {
         return $this->hasOne(Subscription::class)->latestOfMany();
+    }
+
+    public function getActivePlan(): ?Plan
+    {
+        $sub = $this->currentSubscription()
+            ->where('status', Subscription::STATUS_ACTIVE)
+            ->with('plan')
+            ->first();
+
+        return $sub?->plan;
     }
 
     public function payments(): HasMany

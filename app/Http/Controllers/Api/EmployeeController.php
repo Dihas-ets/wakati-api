@@ -33,10 +33,10 @@ class EmployeeController extends Controller
         $this->authorize('viewAny', User::class);
 
         $query = User::query()
-            ->with('department:id,name')
-            ->select(['id', 'name', 'email', 'role', 'job_title', 'department_id', 'status', 'last_login_at', 'card_uid', 'created_at']);
+            ->with(['department:id,name', 'agency:id,name'])
+            ->select(['id', 'company_id', 'agency_id', 'name', 'email', 'role', 'job_title', 'department_id', 'status', 'last_login_at', 'card_uid', 'created_at']);
 
-        if ($request->user()->role === 'employe') {
+        if (in_array($request->user()->role, [User::ROLE_EMPLOYEE, User::ROLE_EMPLOYE], true)) {
             $query->where('id', $request->user()->id);
         }
 

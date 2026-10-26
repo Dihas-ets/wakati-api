@@ -272,12 +272,20 @@ class SuperAdminController extends Controller
             'duration_type' => ['nullable', 'string', 'in:recurring,fixed,trial'],
             'is_trial' => ['boolean'],
             'trial_period_days' => ['integer', 'min:0'],
-            'max_employees' => ['nullable', 'integer', 'min:1'],
+            'max_employees' => ['nullable'],
+            'max_branches' => ['nullable'],
             'features' => ['nullable', 'array'],
             'is_popular' => ['boolean'],
             'is_active' => ['boolean'],
             'sort_order' => ['integer', 'min:0'],
         ]);
+
+        if (array_key_exists('max_employees', $validated)) {
+            $validated['max_employees'] = (empty($validated['max_employees']) || (int) $validated['max_employees'] <= 0) ? null : (int) $validated['max_employees'];
+        }
+        if (array_key_exists('max_branches', $validated)) {
+            $validated['max_branches'] = (empty($validated['max_branches']) || (int) $validated['max_branches'] <= 0) ? null : (int) $validated['max_branches'];
+        }
 
         $plan = Plan::create($validated);
 
@@ -300,12 +308,20 @@ class SuperAdminController extends Controller
             'duration_type' => ['nullable', 'string', 'in:recurring,fixed,trial'],
             'is_trial' => ['boolean'],
             'trial_period_days' => ['integer', 'min:0'],
-            'max_employees' => ['nullable', 'integer', 'min:1'],
+            'max_employees' => ['nullable'],
+            'max_branches' => ['nullable'],
             'features' => ['nullable', 'array'],
             'is_popular' => ['boolean'],
             'is_active' => ['boolean'],
             'sort_order' => ['integer', 'min:0'],
         ]);
+
+        if (array_key_exists('max_employees', $validated)) {
+            $validated['max_employees'] = (empty($validated['max_employees']) || (int) $validated['max_employees'] <= 0) ? null : (int) $validated['max_employees'];
+        }
+        if (array_key_exists('max_branches', $validated)) {
+            $validated['max_branches'] = (empty($validated['max_branches']) || (int) $validated['max_branches'] <= 0) ? null : (int) $validated['max_branches'];
+        }
 
         $plan->update($validated);
 
@@ -412,5 +428,109 @@ class SuperAdminController extends Controller
         $histories = $query->latest()->get();
 
         return response()->json($histories);
+    }
+
+    /**
+     * Liste complète de tous les abonnements de toutes les entreprises avec filtres.
+     */
+    public function subscriptions(Request $request): JsonResponse
+    {
+        $query = Subscription::with([
+            'company:id,name,phone,logo,rccm_ifu,status',
+            'plan',
+        ]);
+
+        if ($request->filled('company_id')) {
+            $query->where('company_id', $request->input('company_id'));
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        if ($request->filled('plan_id')) {
+            $query->where('plan_id', $request->input('plan_id'));
+        }
+
+        $subscriptions = $query->latest('created_at')->get();
+
+        return response()->json($subscriptions);
+    }
+
+    /**
+     * Mise à jour d'un abonnement par le Super-Admin.
+     */
+    public function updateSubscription(Request $request, Subscription $subscription): JsonResponse
+    {
+        $validated = $request->validate([
+            'plan_id' => ['sometimes', 'exists:plans,id'],
+            'start_date' => ['sometimes', 'date'],
+            'end_date' => ['sometimes', 'date'],
+            'status' => ['sometimes', 'string', 'in:active,expired,canceled'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $subscription->update($validated);
+
+        CompanyHistory::create([
+            'company_id' => $subscription->company_id,
+            'user_id' => auth()->id(),
+            'action' => 'subscription_updated',
+            'description' => "Abonnement #{$subscription->id} mis à jour par le Super-Admin.",
+            'metadata' => $validated,
+        ]);
+
+        return response()->json($subscription->load(['company', 'plan']));
+    }
+
+    /**
+     * Récupération des paramètres globaux de la plateforme SaaS (Super-Admin Settings).
+     */
+    public function settings(): JsonResponse
+    {
+        $settings = \App\Models\CompanySetting::all()->pluck('value', 'key');
+
+        return response()->json([
+            'fedapay_mode' => $settings->get('fedapay_mode', 'sandbox'),
+            'fedapay_public_key' => $settings->get('fedapay_public_key', ''),
+            'fedapay_secret_key' => $settings->get('fedapay_secret_key', ''),
+            'fexpay_mode' => $settings->get('fexpay_mode', 'sandbox'),
+            'fexpay_api_key' => $settings->get('fexpay_api_key', ''),
+            'fexpay_token' => $settings->get('fexpay_token', ''),
+            'default_trial_days' => (int) $settings->get('default_trial_days', 14),
+            'default_currency' => $settings->get('default_currency', 'FCFA'),
+            'support_email' => $settings->get('support_email', 'contact@wakati.test'),
+            'platform_name' => $settings->get('platform_name', 'Wakati SaaS'),
+            'allow_self_registration' => (bool) $settings->get('allow_self_registration', true),
+        ]);
+    }
+
+    /**
+     * Mise à jour des paramètres de la plateforme par le Super-Admin.
+     */
+    public function updateSettings(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'fedapay_mode' => ['sometimes', 'string', 'in:sandbox,live'],
+            'fedapay_public_key' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'fedapay_secret_key' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'fexpay_mode' => ['sometimes', 'string', 'in:sandbox,live'],
+            'fexpay_api_key' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'fexpay_token' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'default_trial_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
+            'default_currency' => ['sometimes', 'string', 'max:10'],
+            'support_email' => ['sometimes', 'nullable', 'email', 'max:255'],
+            'platform_name' => ['sometimes', 'string', 'max:255'],
+            'allow_self_registration' => ['sometimes', 'boolean'],
+        ]);
+
+        foreach ($validated as $key => $value) {
+            \App\Models\CompanySetting::updateOrCreate(
+                ['key' => $key],
+                ['value' => $value]
+            );
+        }
+
+        return $this->settings();
     }
 }

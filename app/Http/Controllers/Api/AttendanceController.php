@@ -28,7 +28,7 @@ class AttendanceController extends Controller
     {
         $query = Attendance::query();
 
-        if (in_array($request->user()->role, ['employe', 'comptable'])) {
+        if (in_array($request->user()->role, [\App\Models\User::ROLE_EMPLOYEE, \App\Models\User::ROLE_EMPLOYE, 'comptable'], true)) {
             $query->where('user_id', $request->user()->id);
         } elseif ($request->has('user_id')) {
             $query->where('user_id', $request->user_id);
@@ -586,6 +586,8 @@ class AttendanceController extends Controller
         }
 
         return Attendance::create([
+            'company_id' => $user?->company_id,
+            'agency_id' => $user?->agency_id,
             'user_id' => $userId,
             'schedule_id' => $scheduleId,
             'work_pattern_id' => $workPatternId,

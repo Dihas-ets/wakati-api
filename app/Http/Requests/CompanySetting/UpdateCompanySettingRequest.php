@@ -9,13 +9,18 @@ class UpdateCompanySettingRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return in_array($this->user()?->role, ['rh', 'directeur'], true);
+        return in_array($this->user()?->role, ['super_admin', 'company_admin', 'rh', 'directeur'], true);
     }
 
     public function rules(): array
     {
         return [
             'company_name' => ['sometimes', 'string', 'max:255'],
+            'logo' => ['sometimes', 'nullable', 'string'],
+            'primary_logo' => ['sometimes', 'nullable', 'string'],
+            'secondary_logo' => ['sometimes', 'nullable', 'string'],
+            'primary_color' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'secondary_color' => ['sometimes', 'nullable', 'string', 'max:30'],
             'mail_mailer' => ['sometimes', Rule::in(['smtp', 'log'])],
             'mail_host' => ['sometimes', 'nullable', 'string', 'max:255'],
             'mail_port' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:65535'],

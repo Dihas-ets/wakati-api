@@ -14,8 +14,19 @@ class Agency extends Model
     protected $fillable = [
         'company_id',
         'name',
+        'code',
         'address',
+        'phone',
+        'timezone',
+        'is_active',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+        ];
+    }
 
     public function company(): BelongsTo
     {

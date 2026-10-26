@@ -29,7 +29,12 @@ class KioskSecurityController extends Controller
             ], 401);
         }
 
-        $isAuthorized = in_array($user->role, [User::ROLE_DIRECTEUR, User::ROLE_RH], true);
+        $isAuthorized = in_array($user->role, [
+            User::ROLE_DIRECTEUR,
+            User::ROLE_RH,
+            User::ROLE_COMPANY_ADMIN,
+            User::ROLE_SUPER_ADMIN,
+        ], true);
 
         if (! $isAuthorized) {
             // 1. Enregistrement dans le journal d'activité de sécurité

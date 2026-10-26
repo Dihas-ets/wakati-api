@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
+use App\Models\Company;
 use App\Models\User;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
@@ -64,6 +65,21 @@ class UserController extends Controller
             return response()->json([
                 'message' => "Un responsable RH ne peut pas créer de compte Directeur.",
             ], 403);
+        }
+
+        // Contrôle du quota d'employés du forfait de l'entreprise (max_employees)
+        $companyId = $request->user()->company_id;
+        if ($request->user()->role !== User::ROLE_SUPER_ADMIN && $companyId) {
+            $company = Company::find($companyId);
+            $plan = $company?->getActivePlan();
+            if ($plan && $plan->max_employees !== null) {
+                $currentEmployees = User::where('company_id', $companyId)->count();
+                if ($currentEmployees >= $plan->max_employees) {
+                    return response()->json([
+                        'message' => "Limite d'employés atteinte pour votre forfait ({$plan->max_employees} max). Veuillez passer à un forfait supérieur pour ajouter plus d'employés.",
+                    ], 422);
+                }
+            }
         }
 
         $user = User::create([

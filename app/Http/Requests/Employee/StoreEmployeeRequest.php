@@ -10,7 +10,13 @@ class StoreEmployeeRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return in_array($this->user()?->role, ['rh', 'directeur'], true);
+        return in_array($this->user()?->role, [
+            User::ROLE_SUPER_ADMIN,
+            User::ROLE_COMPANY_ADMIN,
+            User::ROLE_MANAGER,
+            User::ROLE_DIRECTEUR,
+            User::ROLE_RH,
+        ], true);
     }
 
     public function rules(): array

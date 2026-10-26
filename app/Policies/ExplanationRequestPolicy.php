@@ -7,6 +7,15 @@ use App\Models\User;
 
 class ExplanationRequestPolicy
 {
+    public function before(User $user, string $ability): ?bool
+    {
+        if (in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN], true)) {
+            return true;
+        }
+
+        return null;
+    }
+
     public function viewAny(User $user): bool
     {
         return true;
@@ -14,7 +23,7 @@ class ExplanationRequestPolicy
 
     public function view(User $user, ExplanationRequest $explanationRequest): bool
     {
-        if (in_array($user->role, [User::ROLE_DIRECTEUR, User::ROLE_RH], true)) {
+        if (in_array($user->role, [User::ROLE_DIRECTEUR, User::ROLE_RH, User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN], true)) {
             return true;
         }
 

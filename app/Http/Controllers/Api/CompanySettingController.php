@@ -28,6 +28,49 @@ class CompanySettingController extends Controller
         $this->authorize('update', CompanySetting::class);
 
         $data = $request->validated();
+        $user = $request->user();
+
+        // Règle stricte : Seul le Company Admin et le Super Admin ont le droit de modifier le logo principal, logo secondaire et couleurs
+        $isCompanyAdmin = in_array($user?->role, [\App\Models\User::ROLE_SUPER_ADMIN, \App\Models\User::ROLE_COMPANY_ADMIN], true);
+        if (! $isCompanyAdmin) {
+            unset(
+                $data['primary_logo'],
+                $data['logo'],
+                $data['secondary_logo'],
+                $data['primary_color'],
+                $data['secondary_color']
+            );
+        }
+
+        // Si l'utilisateur appartient à une entreprise, synchroniser le modèle Company
+        if ($user && $user->company_id) {
+            $company = \App\Models\Company::find($user->company_id);
+            if ($company) {
+                $companyUpdates = [];
+                if (isset($data['company_name'])) {
+                    $companyUpdates['name'] = $data['company_name'];
+                }
+                if ($isCompanyAdmin) {
+                    if (isset($data['primary_logo'])) {
+                        $companyUpdates['logo'] = $data['primary_logo'];
+                    } elseif (isset($data['logo'])) {
+                        $companyUpdates['logo'] = $data['logo'];
+                    }
+                    if (isset($data['secondary_logo'])) {
+                        $companyUpdates['secondary_logo'] = $data['secondary_logo'];
+                    }
+                    if (isset($data['primary_color'])) {
+                        $companyUpdates['primary_color'] = $data['primary_color'];
+                    }
+                    if (isset($data['secondary_color'])) {
+                        $companyUpdates['secondary_color'] = $data['secondary_color'];
+                    }
+                }
+                if (! empty($companyUpdates)) {
+                    $company->update($companyUpdates);
+                }
+            }
+        }
 
         foreach ($data as $key => $value) {
             CompanySetting::updateOrCreate(['key' => $key], ['value' => $value]);
@@ -120,8 +163,15 @@ class CompanySettingController extends Controller
 
     protected function formatSettings($settings): array
     {
+        $user = auth()->user();
+        $company = ($user && $user->company_id) ? \App\Models\Company::find($user->company_id) : null;
+
         return [
-            'company_name' => $settings->get('company_name', 'Dihas Group'),
+            'company_name' => $company?->name ?? $settings->get('company_name', 'Dihas Group'),
+            'primary_logo' => $company?->primary_logo ?? $settings->get('primary_logo', null),
+            'secondary_logo' => $company?->secondary_logo ?? $settings->get('secondary_logo', null),
+            'primary_color' => $company?->primary_color ?? $settings->get('primary_color', '#795FFC'),
+            'secondary_color' => $company?->secondary_color ?? $settings->get('secondary_color', '#0F172A'),
             'allowed_ips' => $settings->get('allowed_ips', []),
             'late_tolerance_minutes' => $settings->get('late_tolerance_minutes', 10),
             'absence_delay_minutes' => $settings->get('absence_delay_minutes', 60),

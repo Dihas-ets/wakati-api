@@ -7,6 +7,15 @@ use App\Models\User;
 
 class MeetingPolicy
 {
+    public function before(User $user, string $ability): ?bool
+    {
+        if (in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN], true)) {
+            return true;
+        }
+
+        return null;
+    }
+
     /**
      * Tous les utilisateurs authentifiés peuvent consulter la liste des réunions
      * (les réunions sont filtrées selon leur rôle).
