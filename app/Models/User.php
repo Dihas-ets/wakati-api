@@ -117,9 +117,14 @@ class User extends Authenticatable
         return in_array($this->role, [self::ROLE_SUPER_ADMIN, self::ROLE_COMPANY_ADMIN, self::ROLE_DIRECTEUR], true);
     }
 
+    public function isDirector(): bool
+    {
+        return $this->role === self::ROLE_DIRECTEUR;
+    }
+
     public function isManager(): bool
     {
-        return $this->role === self::ROLE_MANAGER;
+        return in_array($this->role, [self::ROLE_MANAGER, self::ROLE_DIRECTEUR], true);
     }
 
     public function isEmployee(): bool

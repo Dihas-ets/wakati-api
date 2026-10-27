@@ -89,6 +89,7 @@ class UserController extends Controller
             'role' => $data['role'],
             'job_title' => $data['job_title'] ?? null,
             'department_id' => $data['department_id'] ?? null,
+            'agency_id' => $data['agency_id'] ?? null,
             'status' => User::STATUS_PAS_POINTE,
             'card_uid' => User::newCardUid(),
             'email_verified_at' => now(),
@@ -144,6 +145,17 @@ class UserController extends Controller
         }
         if (array_key_exists('department_id', $data)) {
             $user->department_id = $data['department_id'];
+        }
+        if (array_key_exists('agency_id', $data)) {
+            $user->agency_id = $data['agency_id'];
+            // Promotion automatique en Directeur si assigné à une agence sans rôle explicite
+            if (! empty($data['agency_id']) && in_array($user->role, [User::ROLE_EMPLOYEE, User::ROLE_EMPLOYE], true) && empty($data['role'])) {
+                $user->role = User::ROLE_DIRECTEUR;
+                if (empty($data['job_title'])) {
+                    $agency = \App\Models\Agency::find($data['agency_id']);
+                    $user->job_title = $agency ? "Directeur d'agence - {$agency->name}" : "Directeur d'agence";
+                }
+            }
         }
 
         // Gestion du blocage / déblocage

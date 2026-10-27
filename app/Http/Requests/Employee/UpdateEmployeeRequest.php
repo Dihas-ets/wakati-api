@@ -30,6 +30,7 @@ class UpdateEmployeeRequest extends FormRequest
             'role' => ['sometimes', Rule::in(User::ROLES)],
             'job_title' => ['sometimes', 'nullable', 'string', 'max:255'],
             'department_id' => ['sometimes', 'nullable', 'integer', 'exists:departments,id'],
+            'agency_id' => ['sometimes', 'nullable', 'integer', 'exists:agencies,id'],
         ];
     }
 }

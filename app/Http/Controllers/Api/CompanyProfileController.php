@@ -29,8 +29,16 @@ class CompanyProfileController extends Controller
             return response()->json(['message' => 'Aucune entreprise rattachée à cet utilisateur.'], 404);
         }
 
-        $company = Company::with(['currentSubscription.plan', 'agencies'])
-            ->findOrFail($user->company_id);
+        $relations = ['agencies'];
+        if (in_array($user->role, [User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN], true)) {
+            $relations[] = 'currentSubscription.plan';
+        }
+
+        $company = Company::with($relations)->findOrFail($user->company_id);
+
+        if ($user->role === User::ROLE_DIRECTEUR) {
+            $company->makeHidden(['currentSubscription']);
+        }
 
         return response()->json([
             'company' => $company,
@@ -98,6 +106,13 @@ class CompanyProfileController extends Controller
             return response()->json(['message' => 'Aucune entreprise rattachée.'], 404);
         }
 
+        // Un directeur ne peut pas voir le forfait actuel de l'entreprise
+        if (! in_array($user->role, [User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN], true)) {
+            return response()->json([
+                'message' => "Accès non autorisé. La consultation de l'abonnement et du forfait est réservée à l'administrateur de l'entreprise.",
+            ], 403);
+        }
+
         $company = Company::findOrFail($user->company_id);
         $currentSubscription = $company->currentSubscription()->with('plan')->first();
 
@@ -143,7 +158,7 @@ class CompanyProfileController extends Controller
         /** @var User $user */
         $user = auth()->user();
 
-        if (! $user->company_id || ! in_array($user->role, [User::ROLE_COMPANY_ADMIN, User::ROLE_DIRECTEUR, User::ROLE_SUPER_ADMIN], true)) {
+        if (! $user->company_id || ! in_array($user->role, [User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN], true)) {
             return response()->json(['message' => 'Action réservée aux administrateurs de l\'entreprise.'], 403);
         }
 
@@ -243,7 +258,7 @@ class CompanyProfileController extends Controller
         /** @var User $user */
         $user = auth()->user();
 
-        if (! $user->company_id || ! in_array($user->role, [User::ROLE_COMPANY_ADMIN, User::ROLE_DIRECTEUR, User::ROLE_SUPER_ADMIN], true)) {
+        if (! $user->company_id || ! in_array($user->role, [User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN], true)) {
             return response()->json(['message' => 'Action réservée aux administrateurs de l\'entreprise.'], 403);
         }
 
@@ -350,6 +365,10 @@ class CompanyProfileController extends Controller
 
         if (! $user->company_id) {
             return response()->json(['message' => 'Aucune entreprise rattachée.'], 404);
+        }
+
+        if (! in_array($user->role, [User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN], true)) {
+            return response()->json(['message' => "Accès non autorisé. La consultation des paiements est réservée à l'administrateur de l'entreprise."], 403);
         }
 
         $payments = Payment::where('company_id', $user->company_id)

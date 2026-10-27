@@ -40,6 +40,13 @@ class EnsureRole
             }
         }
 
+        // Directeur : directeur d'agence ou d'entreprise (accès aux actions directeur, manager, rh)
+        if ($user->role === \App\Models\User::ROLE_DIRECTEUR) {
+            if (array_intersect($roles, ['directeur', 'manager', 'rh'])) {
+                return $next($request);
+            }
+        }
+
         // Manager : directeur d'agence (accès aux actions directeur / manager d'agence)
         if ($user->role === \App\Models\User::ROLE_MANAGER) {
             if (array_intersect($roles, ['manager', 'directeur', 'rh'])) {

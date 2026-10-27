@@ -49,7 +49,7 @@ class AgencyController extends Controller
 
         $agencies = $query->with([
             'users' => function ($q) {
-                $q->select('id', 'name', 'email', 'role', 'agency_id', 'company_id');
+                $q->select('id', 'name', 'email', 'role', 'job_title', 'agency_id', 'company_id');
             },
         ])
         ->withCount(['users', 'attendances'])
@@ -58,12 +58,13 @@ class AgencyController extends Controller
 
         $formatted = $agencies->map(function (Agency $agency) {
             $managers = $agency->users
-                ->filter(fn (User $u) => in_array($u->role, [User::ROLE_MANAGER, 'branch_manager', User::ROLE_DIRECTEUR], true))
+                ->filter(fn (User $u) => in_array($u->role, [User::ROLE_MANAGER, 'branch_manager', User::ROLE_DIRECTEUR, User::ROLE_RH], true))
                 ->map(fn (User $u) => [
                     'id' => $u->id,
                     'name' => $u->name,
                     'email' => $u->email,
                     'role' => $u->role,
+                    'job_title' => $u->job_title,
                     'phone' => null,
                 ])
                 ->values();
@@ -97,15 +98,16 @@ class AgencyController extends Controller
         }
 
         $canCreate = $maxAgencies === null || $currentCount < $maxAgencies;
+        $isCompanyAdmin = in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN], true);
 
         return response()->json([
             'branches' => $formatted,
-            'quota' => [
+            'quota' => $isCompanyAdmin ? [
                 'current' => $currentCount,
                 'max' => $maxAgencies,
                 'is_unlimited' => $maxAgencies === null,
                 'can_create' => $canCreate,
-            ],
+            ] : null,
         ]);
     }
 
@@ -132,8 +134,9 @@ class AgencyController extends Controller
     {
         $user = $request->user();
 
-        if (! in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN, User::ROLE_DIRECTEUR], true)) {
-            return response()->json(['message' => 'Action réservée aux administrateurs.'], 403);
+        // Un directeur ne peut pas créer d'agences : réservé au Company Admin et Super-Admin
+        if (! in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN], true)) {
+            return response()->json(['message' => "Action réservée aux administrateurs de l'entreprise. Un directeur ne peut pas créer d'agences."], 403);
         }
 
         $validated = $request->validate([
@@ -202,7 +205,7 @@ class AgencyController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role !== User::ROLE_SUPER_ADMIN && $agency->company_id !== $user->company_id) {
+        if (! in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN], true) || ($user->role !== User::ROLE_SUPER_ADMIN && $agency->company_id !== $user->company_id)) {
             return response()->json(['message' => 'Accès non autorisé à cette agence.'], 403);
         }
 
@@ -230,7 +233,7 @@ class AgencyController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role !== User::ROLE_SUPER_ADMIN && $agency->company_id !== $user->company_id) {
+        if (! in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN], true) || ($user->role !== User::ROLE_SUPER_ADMIN && $agency->company_id !== $user->company_id)) {
             return response()->json(['message' => 'Accès non autorisé à cette agence.'], 403);
         }
 
@@ -263,17 +266,35 @@ class AgencyController extends Controller
             return response()->json(['message' => "L'utilisateur spécifié n'appartient pas à votre entreprise."], 422);
         }
 
+        // Détermination du rôle système : lorsqu'un employé est assigné à une agence, il devient directeur de cette agence
+        $newRole = User::ROLE_DIRECTEUR;
+        if (! empty($validated['role'])) {
+            $normalizedRole = strtolower(trim($validated['role']));
+            if ($normalizedRole === 'hr_manager' || $normalizedRole === User::ROLE_RH) {
+                $newRole = User::ROLE_RH;
+            } elseif ($normalizedRole === 'branch_manager' || $normalizedRole === User::ROLE_DIRECTEUR || $normalizedRole === 'directeur' || $normalizedRole === User::ROLE_MANAGER) {
+                $newRole = User::ROLE_DIRECTEUR;
+            }
+        }
+
         $targetUser->agency_id = $agency->id;
-        $targetUser->role = User::ROLE_MANAGER;
+        $targetUser->role = $newRole;
+
+        // Mise à jour du poste : il devient directeur de cette agence
+        $targetUser->job_title = $newRole === User::ROLE_DIRECTEUR
+            ? "Directeur d'agence - {$agency->name}"
+            : "Responsable - {$agency->name}";
+
         $targetUser->save();
 
         return response()->json([
-            'message' => 'Responsable assigné à l\'agence avec succès.',
+            'message' => 'L\'employé a été assigné à l\'agence et promu Directeur d\'agence avec succès.',
             'user' => [
                 'id' => $targetUser->id,
                 'name' => $targetUser->name,
                 'email' => $targetUser->email,
                 'role' => $targetUser->role,
+                'job_title' => $targetUser->job_title,
                 'agency_id' => $targetUser->agency_id,
             ],
         ]);

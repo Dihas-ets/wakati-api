@@ -31,6 +31,7 @@ class UpdateUserRequest extends FormRequest
             'role' => ['sometimes', 'required', Rule::in(User::ROLES)],
             'job_title' => ['nullable', 'string', 'max:255'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+            'agency_id' => ['nullable', 'integer', 'exists:agencies,id'],
             'is_blocked' => ['nullable', 'boolean'],
             'status' => ['nullable', 'string', 'max:50'],
         ];

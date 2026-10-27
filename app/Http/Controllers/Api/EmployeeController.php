@@ -89,11 +89,21 @@ class EmployeeController extends Controller
         $this->authorize('update', $user);
 
         $data = $request->validated();
+        $assigningAgency = array_key_exists('agency_id', $data) && ! empty($data['agency_id']);
 
         if (! empty($data['password'])) {
             $data['password'] = Hash::make($data['password']);
         } else {
             unset($data['password']);
+        }
+
+        // Si l'employé est assigné à une agence et qu'aucun autre rôle n'est spécifié, il devient Directeur
+        if ($assigningAgency && in_array($user->role, [User::ROLE_EMPLOYEE, User::ROLE_EMPLOYE], true) && empty($data['role'])) {
+            $data['role'] = User::ROLE_DIRECTEUR;
+            if (empty($data['job_title'])) {
+                $agency = \App\Models\Agency::find($data['agency_id']);
+                $data['job_title'] = $agency ? "Directeur d'agence - {$agency->name}" : "Directeur d'agence";
+            }
         }
 
         $user->update($data);

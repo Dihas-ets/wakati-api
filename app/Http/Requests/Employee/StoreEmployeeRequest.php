@@ -28,6 +28,7 @@ class StoreEmployeeRequest extends FormRequest
             'role' => ['required', Rule::in(User::ROLES)],
             'job_title' => ['nullable', 'string', 'max:255'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+            'agency_id' => ['nullable', 'integer', 'exists:agencies,id'],
         ];
     }
 }
