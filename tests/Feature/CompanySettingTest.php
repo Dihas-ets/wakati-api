@@ -9,6 +9,7 @@ use App\Services\MeetingDocxGeneratorService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -144,5 +145,31 @@ class CompanySettingTest extends TestCase
             'test_email' => 'test@test.com',
         ]);
         $unauthorizedResponse->assertStatus(403);
+    }
+
+    public function test_rh_can_test_email_sending_with_smtp_and_tls_encryption(): void
+    {
+        Mail::fake();
+
+        $rh = User::factory()->create(['role' => 'rh']);
+        Sanctum::actingAs($rh);
+
+        $response = $this->postJson('/api/company-settings/test-email', [
+            'test_email' => 'admin@monentreprise.com',
+            'mail_mailer' => 'smtp',
+            'mail_host' => 'smtp.gmail.com',
+            'mail_port' => 587,
+            'mail_encryption' => 'tls',
+            'mail_username' => 'test@gmail.com',
+            'mail_password' => 'secret',
+            'mail_from_address' => 'noreply@monentreprise.com',
+            'mail_from_name' => 'Wakati Test',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true);
+
+        $this->assertEquals('smtp', config('mail.mailers.smtp.scheme'));
+        $this->assertTrue(config('mail.mailers.smtp.auto_tls'));
     }
 }

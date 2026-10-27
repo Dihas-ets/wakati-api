@@ -107,14 +107,16 @@ class AppServiceProvider extends ServiceProvider
                 }
                 $mailHost = CompanySetting::get('mail_host');
                 if ($mailHost) {
-                    $scheme = CompanySetting::get('mail_encryption', 'tls');
-                    if ($scheme === 'none' || $scheme === 'null' || ! $scheme) {
-                        $scheme = null;
-                    }
+                    $port = (int) CompanySetting::get('mail_port', 587);
+                    $encryption = CompanySetting::get('mail_encryption', 'tls');
+                    $resolved = CompanySetting::resolveSmtpSchemeAndTls($encryption, $port);
+
                     config([
+                        'mail.mailers.smtp.url' => null,
                         'mail.mailers.smtp.host' => $mailHost,
-                        'mail.mailers.smtp.port' => (int) CompanySetting::get('mail_port', 587),
-                        'mail.mailers.smtp.scheme' => $scheme,
+                        'mail.mailers.smtp.port' => $port,
+                        'mail.mailers.smtp.scheme' => $resolved['scheme'],
+                        'mail.mailers.smtp.auto_tls' => $resolved['auto_tls'],
                         'mail.mailers.smtp.username' => CompanySetting::get('mail_username'),
                         'mail.mailers.smtp.password' => CompanySetting::get('mail_password'),
                     ]);
