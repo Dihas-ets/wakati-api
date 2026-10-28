@@ -21,6 +21,13 @@ class CompanySetting extends Model
         });
     }
 
+    public static function set(string $key, $value): self
+    {
+        $setting = static::updateOrCreate(['key' => $key], ['value' => $value]);
+        Cache::forget("company_setting_{$key}");
+        return $setting;
+    }
+
     /**
      * Résout le schéma Symfony Mailer ('smtp', 'smtps') et l'option auto_tls
      * à partir de la valeur de chiffrement utilisateur ('tls', 'ssl', 'null', etc.).

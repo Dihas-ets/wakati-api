@@ -21,8 +21,24 @@ class MeetingConvocationMail extends Mailable
 
     public function envelope(): Envelope
     {
+        $replyToAddress = \App\Models\CompanySetting::get('mail_reply_to_address')
+            ?: \App\Models\CompanySetting::get('mail_from_address')
+            ?: config('mail.reply_to.address')
+            ?: config('mail.from.address');
+
+        $replyToName = \App\Models\CompanySetting::get('mail_reply_to_name')
+            ?: \App\Models\CompanySetting::get('mail_from_name')
+            ?: config('mail.reply_to.name')
+            ?: config('mail.from.name');
+
+        $replyTo = [];
+        if ($replyToAddress) {
+            $replyTo[] = new \Illuminate\Mail\Mailables\Address($replyToAddress, $replyToName ?? '');
+        }
+
         return new Envelope(
             subject: "Convocation : {$this->meeting->title} - " . \Carbon\Carbon::parse($this->meeting->date)->format('d/m/Y'),
+            replyTo: $replyTo,
         );
     }
 

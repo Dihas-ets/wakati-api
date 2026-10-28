@@ -121,16 +121,43 @@ class AppServiceProvider extends ServiceProvider
                         'mail.mailers.smtp.password' => CompanySetting::get('mail_password'),
                     ]);
                 }
-                $fromAddress = CompanySetting::get('mail_from_address');
+                $fromAddress = CompanySetting::get('mail_from_address', config('mail.from.address'));
+                $fromName = CompanySetting::get('mail_from_name', CompanySetting::get('company_name', config('mail.from.name', config('app.name'))));
+                $replyToAddress = CompanySetting::get('mail_reply_to_address', $fromAddress);
+                $replyToName = CompanySetting::get('mail_reply_to_name', $fromName);
+
                 if ($fromAddress) {
                     config([
                         'mail.from.address' => $fromAddress,
-                        'mail.from.name' => CompanySetting::get('mail_from_name', CompanySetting::get('company_name', config('app.name'))),
+                        'mail.from.name' => $fromName,
+                    ]);
+                }
+
+                if ($replyToAddress) {
+                    config([
+                        'mail.reply_to.address' => $replyToAddress,
+                        'mail.reply_to.name' => $replyToName,
                     ]);
                 }
             }
         } catch (\Throwable $e) {
             // Ignorer silencieusement si la base n'est pas encore initialisée
         }
+
+        // 4. Injection systématique du Reply-To sur l'ensemble des e-mails sortants
+        \Illuminate\Support\Facades\Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            function (\Illuminate\Mail\Events\MessageSending $event) {
+                $message = $event->message;
+                if (empty($message->getReplyTo())) {
+                    $replyToAddress = config('mail.reply_to.address') ?: config('mail.from.address');
+                    $replyToName = config('mail.reply_to.name') ?: config('mail.from.name');
+
+                    if (!empty($replyToAddress)) {
+                        $message->replyTo(new \Symfony\Component\Mime\Address($replyToAddress, $replyToName ?? ''));
+                    }
+                }
+            }
+        );
     }
 }

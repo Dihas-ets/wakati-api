@@ -24,6 +24,8 @@ class UpdateCompanySettingRequest extends FormRequest
             'mail_password' => ['sometimes', 'nullable', 'string', 'max:255'],
             'mail_from_address' => ['sometimes', 'nullable', 'email', 'max:255'],
             'mail_from_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'mail_reply_to_address' => ['sometimes', 'nullable', 'email', 'max:255'],
+            'mail_reply_to_name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'allowed_ips' => ['sometimes', 'array'],
             'allowed_ips.*' => ['string', 'max:45'],
             'late_tolerance_minutes' => ['sometimes', 'integer', 'min:0', 'max:120'],

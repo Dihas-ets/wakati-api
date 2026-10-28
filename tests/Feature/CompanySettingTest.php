@@ -106,6 +106,8 @@ class CompanySettingTest extends TestCase
             'mail_password' => 'secret-app-password',
             'mail_from_address' => 'noreply@monentreprise.com',
             'mail_from_name' => 'Wakati Notification',
+            'mail_reply_to_address' => 'cto@dihas.tech',
+            'mail_reply_to_name' => 'Support Dihas',
         ]);
 
         $updateResponse->assertStatus(200)
@@ -116,10 +118,14 @@ class CompanySettingTest extends TestCase
             ->assertJsonPath('mail_username', 'wakati.admin@gmail.com')
             ->assertJsonPath('mail_password', 'secret-app-password')
             ->assertJsonPath('mail_from_address', 'noreply@monentreprise.com')
-            ->assertJsonPath('mail_from_name', 'Wakati Notification');
+            ->assertJsonPath('mail_from_name', 'Wakati Notification')
+            ->assertJsonPath('mail_reply_to_address', 'cto@dihas.tech')
+            ->assertJsonPath('mail_reply_to_name', 'Support Dihas');
 
         $this->assertEquals('smtp.gmail.com', CompanySetting::get('mail_host'));
         $this->assertEquals('wakati.admin@gmail.com', CompanySetting::get('mail_username'));
+        $this->assertEquals('cto@dihas.tech', CompanySetting::get('mail_reply_to_address'));
+        $this->assertEquals('Support Dihas', CompanySetting::get('mail_reply_to_name'));
     }
 
     public function test_rh_can_test_email_sending_with_log_driver(): void
@@ -172,4 +178,34 @@ class CompanySettingTest extends TestCase
         $this->assertEquals('smtp', config('mail.mailers.smtp.scheme'));
         $this->assertTrue(config('mail.mailers.smtp.auto_tls'));
     }
+
+    public function test_outgoing_email_automatically_attaches_reply_to_header(): void
+    {
+        CompanySetting::set('mail_reply_to_address', 'cto@dihas.tech');
+        CompanySetting::set('mail_reply_to_name', 'Direction Technique');
+        config([
+            'mail.reply_to.address' => 'cto@dihas.tech',
+            'mail.reply_to.name' => 'Direction Technique',
+        ]);
+
+        $capturedReplyTo = null;
+        \Illuminate\Support\Facades\Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            function (\Illuminate\Mail\Events\MessageSending $event) use (&$capturedReplyTo) {
+                $capturedReplyTo = $event->message->getReplyTo();
+            }
+        );
+
+        config(['mail.default' => 'log']);
+
+        // Envoi sans préciser de replyTo
+        Mail::raw('Test notification', function ($message) {
+            $message->to('employe@dihas.tech')->subject('Sujet');
+        });
+
+        $this->assertNotEmpty($capturedReplyTo);
+        $this->assertEquals('cto@dihas.tech', $capturedReplyTo[0]->getAddress());
+        $this->assertEquals('Direction Technique', $capturedReplyTo[0]->getName());
+    }
 }
+

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
+use App\Models\AuditLog;
+use App\Models\Position;
 use App\Models\User;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
@@ -14,21 +16,20 @@ class UserController extends Controller
 {
     use AuthorizesRequests;
 
-    /**
-     * GET /api/users
-     * Accessible au Directeur et aux RH.
-     */
     public function index(Request $request)
     {
         $this->authorize('viewAny', User::class);
 
-        $query = User::with('department:id,name')
-            ->select('id', 'name', 'email', 'role', 'job_title', 'department_id', 'status', 'card_uid', 'created_at');
+        $query = User::with([
+            'department:id,name',
+            'positions:id,department_id,title,permissions,is_sensitive',
+        ])->select('id', 'name', 'email', 'role', 'job_title', 'department_id', 'status', 'card_uid', 'created_at');
 
         if ($search = $request->query('q')) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('job_title', 'like', "%{$search}%");
             });
         }
 
@@ -49,28 +50,28 @@ class UserController extends Controller
         );
     }
 
-    /**
-     * POST /api/users
-     * Accessible au Directeur et aux RH.
-     */
     public function store(StoreUserRequest $request)
     {
         $this->authorize('create', User::class);
 
         $data = $request->validated();
+        $targetRole = $data['role'] ?? User::ROLE_EMPLOYE;
 
         // Un RH ne peut pas créer de compte Directeur
-        if ($request->user()->role === User::ROLE_RH && $data['role'] === User::ROLE_DIRECTEUR) {
+        if ($request->user()->role === User::ROLE_RH && $targetRole === User::ROLE_DIRECTEUR) {
             return response()->json([
                 'message' => "Un responsable RH ne peut pas créer de compte Directeur.",
             ], 403);
         }
 
+        // Pré-vérification : attribution de poste sensible interdite aux non-admins
+        $this->checkSensitivePositionsOnCreate($request, $data);
+
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
-            'role' => $data['role'],
+            'role' => $targetRole,
             'job_title' => $data['job_title'] ?? null,
             'department_id' => $data['department_id'] ?? null,
             'status' => User::STATUS_PAS_POINTE,
@@ -78,15 +79,13 @@ class UserController extends Controller
             'email_verified_at' => now(),
         ]);
 
-        $user->load('department:id,name');
+        $this->syncUserPositions($request, $user, $data);
+
+        $user->load(['department:id,name', 'positions:id,department_id,title,permissions,is_sensitive']);
 
         return response()->json($user, 201);
     }
 
-    /**
-     * PUT /api/users/{user}
-     * Accessible au Directeur et aux RH.
-     */
     public function update(UpdateUserRequest $request, User $user)
     {
         $this->authorize('update', $user);
@@ -113,6 +112,8 @@ class UserController extends Controller
                 ], 403);
             }
         }
+
+        $this->syncUserPositions($request, $user, $data);
 
         if (isset($data['name'])) {
             $user->name = $data['name'];
@@ -141,19 +142,16 @@ class UserController extends Controller
             $user->status = $data['status'];
         }
 
-        if (!empty($data['password'])) {
+        if (! empty($data['password'])) {
             $user->password = Hash::make($data['password']);
         }
 
         $user->save();
-        $user->load('department:id,name');
+        $user->load(['department:id,name', 'positions:id,department_id,title,permissions,is_sensitive']);
 
         return response()->json($user);
     }
 
-    /**
-     * DELETE /api/users/{user}
-     */
     public function destroy(Request $request, User $user)
     {
         $this->authorize('delete', $user);
@@ -170,8 +168,112 @@ class UserController extends Controller
             ], 403);
         }
 
+        if ($user->hasSensitiveRole() && ! $request->user()->isAdmin()) {
+            abort(403, "Action non autorisée. Seul un administrateur peut supprimer un compte doté d'accès sensibles.");
+        }
+
         $user->delete();
 
         return response()->json(['message' => 'Compte supprimé.']);
+    }
+
+    protected function checkSensitivePositionsOnCreate(Request $request, array $data): void
+    {
+        $targetIds = array_filter(array_merge(
+            isset($data['primary_position_id']) ? [$data['primary_position_id']] : [],
+            (array) ($data['secondary_position_ids'] ?? []),
+            (array) ($data['position_ids'] ?? [])
+        ));
+
+        if (! empty($targetIds)) {
+            $hasSensitive = Position::whereIn('id', $targetIds)->where('is_sensitive', true)->exists();
+            if ($hasSensitive && ! $request->user()->isAdmin()) {
+                abort(403, "Action non autorisée. Seul un administrateur peut attribuer un poste à responsabilité sensible.");
+            }
+        }
+    }
+
+    protected function syncUserPositions(Request $request, User $user, array $data): void
+    {
+        $hasPrimary = array_key_exists('primary_position_id', $data);
+        $hasSecondary = array_key_exists('secondary_position_ids', $data);
+        $hasPositions = array_key_exists('position_ids', $data);
+
+        if (! $hasPrimary && ! $hasSecondary && ! $hasPositions) {
+            return;
+        }
+
+        $primaryId = $data['primary_position_id'] ?? null;
+        $secondaryIds = (array) ($data['secondary_position_ids'] ?? []);
+
+        if ($hasPositions && ! $primaryId && ! empty($data['position_ids'])) {
+            $primaryId = $data['position_ids'][0];
+            $secondaryIds = array_slice($data['position_ids'], 1);
+        }
+
+        $currentSensitiveIds = $user->positions()->where('is_sensitive', true)->pluck('positions.id')->all();
+
+        $allTargetIds = array_unique(array_filter(array_merge($primaryId ? [$primaryId] : [], $secondaryIds)));
+        $targetPositions = Position::whereIn('id', $allTargetIds)->get();
+        $targetSensitiveIds = $targetPositions->where('is_sensitive', true)->pluck('id')->all();
+
+        $addedSensitive = array_diff($targetSensitiveIds, $currentSensitiveIds);
+        $removedSensitive = array_diff($currentSensitiveIds, $targetSensitiveIds);
+
+        if ((count($addedSensitive) > 0 || count($removedSensitive) > 0) && ! $request->user()->isAdmin()) {
+            abort(403, "Action non autorisée. Seul un administrateur peut attribuer ou retirer un poste sensible.");
+        }
+
+        $sync = [];
+        if ($primaryId) {
+            $sync[$primaryId] = ['is_primary' => true];
+        }
+        foreach ($secondaryIds as $secId) {
+            if ($secId != $primaryId) {
+                $sync[$secId] = ['is_primary' => false];
+            }
+        }
+        $user->positions()->sync($sync);
+
+        if ($primaryId && ($primaryPos = $targetPositions->firstWhere('id', $primaryId))) {
+            $updates = [];
+            if (empty($data['job_title'])) {
+                $updates['job_title'] = $primaryPos->title;
+            }
+            if (empty($data['department_id'])) {
+                $updates['department_id'] = $primaryPos->department_id;
+            }
+            if (! empty($updates)) {
+                $user->update($updates);
+            }
+        }
+
+        foreach ($addedSensitive as $posId) {
+            $pos = $targetPositions->firstWhere('id', $posId);
+            AuditLog::record(
+                userId: $request->user()->id,
+                targetUserId: $user->id,
+                action: 'position.sensitive_assigned',
+                details: [
+                    'position_id' => $posId,
+                    'position_title' => $pos?->title,
+                ],
+                ip: $request->ip()
+            );
+        }
+
+        foreach ($removedSensitive as $posId) {
+            $pos = Position::find($posId);
+            AuditLog::record(
+                userId: $request->user()->id,
+                targetUserId: $user->id,
+                action: 'position.sensitive_revoked',
+                details: [
+                    'position_id' => $posId,
+                    'position_title' => $pos?->title,
+                ],
+                ip: $request->ip()
+            );
+        }
     }
 }

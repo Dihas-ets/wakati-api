@@ -55,6 +55,8 @@ class CompanySettingController extends Controller
             'mail_password' => 'nullable|string',
             'mail_from_address' => 'nullable|email',
             'mail_from_name' => 'nullable|string',
+            'mail_reply_to_address' => 'nullable|email',
+            'mail_reply_to_name' => 'nullable|string',
         ]);
 
         $recipient = $request->test_email;
@@ -68,6 +70,8 @@ class CompanySettingController extends Controller
         $password = $request->input('mail_password', $settings->get('mail_password', config('mail.mailers.smtp.password')));
         $fromAddress = $request->input('mail_from_address', $settings->get('mail_from_address', config('mail.from.address', 'direction@wakati.local')));
         $fromName = $request->input('mail_from_name', $settings->get('mail_from_name', $settings->get('company_name', 'Wakati')));
+        $replyToAddress = $request->input('mail_reply_to_address', $settings->get('mail_reply_to_address', $fromAddress));
+        $replyToName = $request->input('mail_reply_to_name', $settings->get('mail_reply_to_name', $fromName));
 
         $resolved = CompanySetting::resolveSmtpSchemeAndTls($encryption, $port);
 
@@ -83,6 +87,8 @@ class CompanySettingController extends Controller
             'mail.mailers.smtp.password' => $password,
             'mail.from.address' => $fromAddress,
             'mail.from.name' => $fromName,
+            'mail.reply_to.address' => $replyToAddress,
+            'mail.reply_to.name' => $replyToName,
         ]);
 
         Mail::purge('smtp');
@@ -92,12 +98,17 @@ class CompanySettingController extends Controller
                 ? strtoupper($encryption)
                 : 'Aucun chiffrement';
 
+            $replyInfo = $replyToAddress ? "• Répondre à (Reply-To) : {$replyToName} <{$replyToAddress}>\n" : "";
+
             Mail::raw(
-                "Bonjour,\n\nCe message confirme que les paramètres d'envoi d'e-mails (SMTP) de votre application Wakati sont parfaitement configurés et fonctionnels.\n\n• Expéditeur : {$fromName} <{$fromAddress}>\n• Serveur SMTP : {$host}:{$port} ({$encLabel})\n• Date : " . now()->format('d/m/Y H:i:s') . "\n\nVos collaborateurs recevront désormais automatiquement leurs convocations aux réunions et leurs comptes-rendus personnalisés !",
-                function ($message) use ($recipient, $fromName, $fromAddress) {
+                "Bonjour,\n\nCe message confirme que les paramètres d'envoi d'e-mails (SMTP) de votre application Wakati sont parfaitement configurés et fonctionnels.\n\n• Expéditeur : {$fromName} <{$fromAddress}>\n{$replyInfo}• Serveur SMTP : {$host}:{$port} ({$encLabel})\n• Date : " . now()->format('d/m/Y H:i:s') . "\n\nVos collaborateurs recevront désormais automatiquement leurs convocations aux réunions et leurs comptes-rendus personnalisés !",
+                function ($message) use ($recipient, $fromName, $fromAddress, $replyToAddress, $replyToName) {
                     $message->to($recipient)
-                        ->from($fromAddress, $fromName)
-                        ->subject("✅ Test d'envoi réussi — {$fromName} (Wakati)");
+                        ->from($fromAddress, $fromName);
+                    if ($replyToAddress) {
+                        $message->replyTo($replyToAddress, $replyToName);
+                    }
+                    $message->subject("✅ Test d'envoi réussi — {$fromName} (Wakati)");
                 }
             );
 
@@ -140,6 +151,8 @@ class CompanySettingController extends Controller
             'mail_password' => $settings->get('mail_password', config('mail.mailers.smtp.password', '')),
             'mail_from_address' => $settings->get('mail_from_address', config('mail.from.address', '')),
             'mail_from_name' => $settings->get('mail_from_name', config('mail.from.name', 'Wakati')),
+            'mail_reply_to_address' => $settings->get('mail_reply_to_address', $settings->get('mail_from_address', config('mail.reply_to.address', ''))),
+            'mail_reply_to_name' => $settings->get('mail_reply_to_name', $settings->get('mail_from_name', config('mail.reply_to.name', 'Wakati'))),
         ];
     }
 }

@@ -19,7 +19,15 @@ use App\Http\Controllers\Api\KioskHeartbeatController;
 use App\Http\Controllers\Api\KioskSecurityController;
 use App\Http\Controllers\Api\MeetingController;
 use App\Http\Controllers\Api\KanbanTaskController;
+use App\Http\Controllers\Api\PositionController;
+use App\Http\Controllers\Api\PayrollController;
+use App\Http\Controllers\Api\AuditLogController;
+use App\Http\Controllers\Api\EmployeeInvitationController;
 use Illuminate\Support\Facades\Route;
+
+// --- Inscription par invitation (publiques) ---
+Route::get('/invitations/verify/{token}', [EmployeeInvitationController::class, 'verifyToken']);
+Route::post('/invitations/accept', [EmployeeInvitationController::class, 'acceptInvitation']);
 
 // --- Authentification (publique avec anti-brute force strict) ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login')->name('login');
@@ -48,6 +56,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/explanation-requests/{explanationRequest}/respond', [ExplanationRequestController::class, 'respond']);
 
     Route::middleware('role:rh,directeur')->group(function () {
+        Route::post('/invitations/send', [EmployeeInvitationController::class, 'sendInvitation']);
+        Route::get('/invitations', [EmployeeInvitationController::class, 'index']);
+
         Route::post('/employees', [EmployeeController::class, 'store']);
         Route::put('/employees/{user}', [EmployeeController::class, 'update']);
         Route::delete('/employees/{user}', [EmployeeController::class, 'destroy']);
@@ -66,10 +77,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/kiosk/heartbeats', [KioskHeartbeatController::class, 'index']);
     });
 
-    Route::middleware('role:comptable,directeur')->group(function () {
+    Route::middleware('role:comptable,directeur,rh')->group(function () {
         Route::get('/dashboard/accounting-summary', [StatsController::class, 'accountingSummary']);
         Route::get('/exports/attendances.csv', [ExportController::class, 'attendancesCsv']);
+        Route::get('/payrolls', [PayrollController::class, 'index']);
+        Route::get('/payrolls/export/csv', [PayrollController::class, 'exportCsv']);
+        Route::post('/payrolls/upsert-rh', [PayrollController::class, 'upsertRh']);
+        Route::post('/payrolls/{payroll}/mark-as-paid', [PayrollController::class, 'markAsPaid']);
     });
+
+    Route::apiResource('positions', PositionController::class);
+    Route::get('/audit-logs', [AuditLogController::class, 'index']);
 
     Route::middleware('role:rh,directeur')->group(function () {
         Route::get('/users', [UserController::class, 'index']);
