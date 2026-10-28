@@ -8,6 +8,7 @@ use App\Models\CompanySetting;
 use App\Models\Department;
 use App\Models\ExplanationRequest;
 use App\Models\Leave;
+use App\Models\Position;
 use App\Models\Schedule;
 use App\Models\User;
 use App\Models\WorkPattern;
@@ -17,6 +18,7 @@ use App\Policies\CompanySettingPolicy;
 use App\Policies\DepartmentPolicy;
 use App\Policies\ExplanationRequestPolicy;
 use App\Policies\LeavePolicy;
+use App\Policies\PositionPolicy;
 use App\Policies\SchedulePolicy;
 use App\Policies\UserPolicy;
 use App\Policies\WorkPatternPolicy;
@@ -49,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(CompanySetting::class, CompanySettingPolicy::class);
         Gate::policy(Department::class, DepartmentPolicy::class);
         Gate::policy(Leave::class, LeavePolicy::class);
+        Gate::policy(Position::class, PositionPolicy::class);
         Gate::policy(Schedule::class, SchedulePolicy::class);
         Gate::policy(WorkPattern::class, WorkPatternPolicy::class);
 
@@ -107,28 +110,57 @@ class AppServiceProvider extends ServiceProvider
                 }
                 $mailHost = CompanySetting::get('mail_host');
                 if ($mailHost) {
-                    $scheme = CompanySetting::get('mail_encryption', 'tls');
-                    if ($scheme === 'none' || $scheme === 'null' || ! $scheme) {
-                        $scheme = null;
-                    }
+                    $port = (int) CompanySetting::get('mail_port', 587);
+                    $encryption = CompanySetting::get('mail_encryption', 'tls');
+                    $resolved = CompanySetting::resolveSmtpSchemeAndTls($encryption, $port);
+
                     config([
+                        'mail.mailers.smtp.url' => null,
                         'mail.mailers.smtp.host' => $mailHost,
-                        'mail.mailers.smtp.port' => (int) CompanySetting::get('mail_port', 587),
-                        'mail.mailers.smtp.scheme' => $scheme,
+                        'mail.mailers.smtp.port' => $port,
+                        'mail.mailers.smtp.scheme' => $resolved['scheme'],
+                        'mail.mailers.smtp.auto_tls' => $resolved['auto_tls'],
                         'mail.mailers.smtp.username' => CompanySetting::get('mail_username'),
                         'mail.mailers.smtp.password' => CompanySetting::get('mail_password'),
                     ]);
                 }
-                $fromAddress = CompanySetting::get('mail_from_address');
+                $fromAddress = CompanySetting::get('mail_from_address', config('mail.from.address'));
+                $fromName = CompanySetting::get('mail_from_name', CompanySetting::get('company_name', config('mail.from.name', config('app.name'))));
+                $replyToAddress = CompanySetting::get('mail_reply_to_address', $fromAddress);
+                $replyToName = CompanySetting::get('mail_reply_to_name', $fromName);
+
                 if ($fromAddress) {
                     config([
                         'mail.from.address' => $fromAddress,
-                        'mail.from.name' => CompanySetting::get('mail_from_name', CompanySetting::get('company_name', config('app.name'))),
+                        'mail.from.name' => $fromName,
+                    ]);
+                }
+
+                if ($replyToAddress) {
+                    config([
+                        'mail.reply_to.address' => $replyToAddress,
+                        'mail.reply_to.name' => $replyToName,
                     ]);
                 }
             }
         } catch (\Throwable $e) {
             // Ignorer silencieusement si la base n'est pas encore initialisée
         }
+
+        // 4. Injection systématique du Reply-To sur l'ensemble des e-mails sortants
+        \Illuminate\Support\Facades\Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            function (\Illuminate\Mail\Events\MessageSending $event) {
+                $message = $event->message;
+                if (empty($message->getReplyTo())) {
+                    $replyToAddress = config('mail.reply_to.address') ?: config('mail.from.address');
+                    $replyToName = config('mail.reply_to.name') ?: config('mail.from.name');
+
+                    if (! empty($replyToAddress)) {
+                        $message->replyTo(new \Symfony\Component\Mime\Address($replyToAddress, $replyToName ?? ''));
+                    }
+                }
+            }
+        );
     }
 }

@@ -1,29 +1,33 @@
 <?php
 
 use App\Http\Controllers\Api\AbsenceController;
+use App\Http\Controllers\Api\ActivityLogController;
+use App\Http\Controllers\Api\AgencyController;
+use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BadgeController;
+use App\Http\Controllers\Api\CompanyProfileController;
 use App\Http\Controllers\Api\CompanySettingController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\EmployeeController;
-use App\Http\Controllers\Api\ExportController;
-use App\Http\Controllers\Api\StatsController;
-use App\Http\Controllers\Api\UserController;
-use App\Http\Controllers\Api\ScheduleController;
-use App\Http\Controllers\Api\WorkPatternController;
-use App\Http\Controllers\Api\AttendanceController;
-use App\Http\Controllers\Api\LeaveController;
+use App\Http\Controllers\Api\EmployeeInvitationController;
 use App\Http\Controllers\Api\ExplanationRequestController;
-use App\Http\Controllers\Api\ActivityLogController;
+use App\Http\Controllers\Api\ExportController;
+use App\Http\Controllers\Api\KanbanTaskController;
 use App\Http\Controllers\Api\KioskHeartbeatController;
 use App\Http\Controllers\Api\KioskSecurityController;
+use App\Http\Controllers\Api\LeaveController;
 use App\Http\Controllers\Api\MeetingController;
-use App\Http\Controllers\Api\KanbanTaskController;
-use App\Http\Controllers\Api\TenantRegistrationController;
+use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\PlanController;
-use App\Http\Controllers\Api\CompanyProfileController;
-use App\Http\Controllers\Api\AgencyController;
+use App\Http\Controllers\Api\PositionController;
+use App\Http\Controllers\Api\ScheduleController;
+use App\Http\Controllers\Api\StatsController;
 use App\Http\Controllers\Api\SuperAdminController;
+use App\Http\Controllers\Api\TenantRegistrationController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\WorkPatternController;
 use Illuminate\Support\Facades\Route;
 
 // --- Forfaits publics & Inscription Tenant (publique) ---
@@ -31,6 +35,10 @@ Route::get('/plans', [PlanController::class, 'index'])->name('plans.index');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login')->name('login');
 Route::post('/register-tenant', [TenantRegistrationController::class, 'registerCompany'])->name('register-tenant');
 Route::post('/register-company', [TenantRegistrationController::class, 'registerCompany'])->name('register-company');
+
+// --- Inscription par invitation (publiques) ---
+Route::get('/invitations/verify/{token}', [EmployeeInvitationController::class, 'verifyToken']);
+Route::post('/invitations/accept', [EmployeeInvitationController::class, 'acceptInvitation']);
 
 // --- Synchronisation hors-ligne & Heartbeat borne (secret partagé / session admin) ---
 Route::middleware('offline-sync')->group(function () {
@@ -55,7 +63,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/explanation-requests', [ExplanationRequestController::class, 'index']);
     Route::post('/explanation-requests/{explanationRequest}/respond', [ExplanationRequestController::class, 'respond']);
 
-    Route::middleware('role:rh,directeur')->group(function () {
+    Route::middleware('role:rh,directeur,company_admin')->group(function () {
+        Route::post('/invitations/send', [EmployeeInvitationController::class, 'sendInvitation']);
+        Route::get('/invitations', [EmployeeInvitationController::class, 'index']);
+
         Route::post('/employees', [EmployeeController::class, 'store']);
         Route::put('/employees/{user}', [EmployeeController::class, 'update']);
         Route::delete('/employees/{user}', [EmployeeController::class, 'destroy']);
@@ -74,12 +85,19 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/kiosk/heartbeats', [KioskHeartbeatController::class, 'index']);
     });
 
-    Route::middleware('role:comptable,directeur')->group(function () {
+    Route::middleware('role:comptable,directeur,rh,company_admin')->group(function () {
         Route::get('/dashboard/accounting-summary', [StatsController::class, 'accountingSummary']);
         Route::get('/exports/attendances.csv', [ExportController::class, 'attendancesCsv']);
+        Route::get('/payrolls', [PayrollController::class, 'index']);
+        Route::get('/payrolls/export/csv', [PayrollController::class, 'exportCsv']);
+        Route::post('/payrolls/upsert-rh', [PayrollController::class, 'upsertRh']);
+        Route::post('/payrolls/{payroll}/mark-as-paid', [PayrollController::class, 'markAsPaid']);
     });
 
-    Route::middleware('role:rh,directeur')->group(function () {
+    Route::apiResource('positions', PositionController::class);
+    Route::get('/audit-logs', [AuditLogController::class, 'index']);
+
+    Route::middleware('role:rh,directeur,company_admin')->group(function () {
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{user}', [UserController::class, 'update']);

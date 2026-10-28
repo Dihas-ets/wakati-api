@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Department;
 
 use App\Models\Department;
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -10,15 +11,26 @@ class UpdateDepartmentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return in_array($this->user()?->role, ['rh', 'directeur'], true);
+        $u = $this->user();
+        return $u?->isAdmin()
+            || $u?->hasPermission('rh')
+            || in_array($u?->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN, User::ROLE_DIRECTEUR, User::ROLE_RH], true);
     }
 
     public function rules(): array
     {
         $departmentId = $this->route('department') instanceof Department ? $this->route('department')->id : $this->route('department');
+        $companyId = $this->user()?->company_id;
 
         return [
-            'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')->ignore($departmentId)],
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('departments', 'name')->where(function ($query) use ($companyId) {
+                    return $companyId ? $query->where('company_id', $companyId) : $query;
+                })->ignore($departmentId),
+            ],
             'description' => ['nullable', 'string', 'max:1000'],
         ];
     }

@@ -33,6 +33,13 @@ class EnsureRole
             return $next($request);
         }
 
+        // Cumul des permissions dynamiques issues des postes (RBAC)
+        foreach ($roles as $r) {
+            if ($user->hasPermission($r)) {
+                return $next($request);
+            }
+        }
+
         // Company admin : droits de gestion pour son entreprise (équivalent directeur / rh / manager)
         if ($user->role === \App\Models\User::ROLE_COMPANY_ADMIN) {
             if (array_intersect($roles, ['company_admin', 'directeur', 'rh', 'manager'])) {

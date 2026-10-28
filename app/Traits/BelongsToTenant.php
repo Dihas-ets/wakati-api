@@ -84,6 +84,13 @@ trait BelongsToTenant
                     }
                 }
             }
+
+            if (empty($model->company_id)) {
+                $firstCompany = Company::first();
+                if ($firstCompany) {
+                    $model->company_id = $firstCompany->id;
+                }
+            }
         });
     }
 

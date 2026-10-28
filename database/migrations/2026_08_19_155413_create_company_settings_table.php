@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::create('company_settings', function (Blueprint $table) {
             $table->id();
-            $table->string('key')->unique();
-            $table->json('value');
+            $table->string('key')->nullable()->index();
+            $table->json('value')->nullable();
             $table->string('description')->nullable();
             $table->timestamps();
         });

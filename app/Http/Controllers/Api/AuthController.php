@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -14,14 +13,12 @@ class AuthController extends Controller
 {
     /**
      * POST /api/login
-     * Body attendu : { "email": "...", "password": "..." }
-     * Réponse : { "token": "...", "user": { id, name, email, role } }
      */
     public function login(LoginRequest $request)
     {
         $credentials = $request->validated();
 
-        $user = User::where('email', $credentials['email'])->first();
+        $user = User::withoutGlobalScopes()->where('email', $credentials['email'])->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
@@ -35,8 +32,6 @@ class AuthController extends Controller
             ]);
         }
 
-        // Un seul token actif à la fois par appareil ; on peut nommer le token
-        // avec le user-agent pour le retrouver plus tard si besoin.
         $token = $user->createToken('wakati-frontend')->plainTextToken;
 
         $user->update([
@@ -44,27 +39,39 @@ class AuthController extends Controller
             'last_login_at' => now(),
         ]);
 
-        $user->load('department:id,name');
+        $user->load([
+            'department:id,name',
+            'positions:id,department_id,title,permissions,is_sensitive',
+            'company:id,name,status,access_type,logo',
+            'agency:id,name',
+        ]);
 
         return response()->json([
             'token' => $token,
             'user' => [
                 'id' => $user->id,
+                'company_id' => $user->company_id,
+                'agency_id' => $user->agency_id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'phone' => $user->phone,
                 'role' => $user->role,
                 'job_title' => $user->job_title,
                 'department' => $user->department,
+                'department_id' => $user->department_id,
                 'status' => $user->status,
                 'card_uid' => $user->card_uid ?? $user->ensureCardUid(),
+                'positions' => $user->positions,
+                'is_admin' => $user->isAdmin(),
+                'has_sensitive_role' => $user->hasSensitiveRole(),
+                'company' => $user->company,
+                'agency' => $user->agency,
             ],
         ]);
     }
 
     /**
      * POST /api/logout
-     * Nécessite d'être authentifié (Bearer token).
-     * Révoque uniquement le token utilisé pour cette requête.
      */
     public function logout(Request $request)
     {
@@ -76,21 +83,34 @@ class AuthController extends Controller
 
     /**
      * GET /api/me
-     * Retourne l'utilisateur actuellement authentifié.
      */
     public function me(Request $request)
     {
-        $user = $request->user()->load('department:id,name');
+        $user = $request->user()->load([
+            'department:id,name',
+            'positions:id,department_id,title,permissions,is_sensitive',
+            'company:id,name,status,access_type,logo',
+            'agency:id,name',
+        ]);
 
         return response()->json([
             'id' => $user->id,
+            'company_id' => $user->company_id,
+            'agency_id' => $user->agency_id,
             'name' => $user->name,
             'email' => $user->email,
+            'phone' => $user->phone,
             'role' => $user->role,
             'job_title' => $user->job_title,
             'department' => $user->department,
+            'department_id' => $user->department_id,
             'status' => $user->status,
             'card_uid' => $user->card_uid ?? $user->ensureCardUid(),
+            'positions' => $user->positions,
+            'is_admin' => $user->isAdmin(),
+            'has_sensitive_role' => $user->hasSensitiveRole(),
+            'company' => $user->company,
+            'agency' => $user->agency,
         ]);
     }
 }

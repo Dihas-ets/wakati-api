@@ -15,19 +15,22 @@ class DepartmentController extends Controller
 
     /**
      * GET /api/departments
-     * Liste simple, utilisée pour remplir le <select> département
-     * dans le formulaire d'ajout/édition d'employé.
      */
     public function index()
     {
         $this->authorize('viewAny', Department::class);
 
         return response()->json(
-            Department::with(['users' => function ($q) {
-                $q->select('id', 'name', 'email', 'role', 'job_title', 'department_id', 'status', 'card_uid')
-                    ->orderBy('name');
-            }])
-            ->withCount('users')
+            Department::with([
+                'positions' => function ($q) {
+                    $q->orderBy('title');
+                },
+                'users' => function ($q) {
+                    $q->select('id', 'name', 'email', 'role', 'job_title', 'department_id', 'status', 'card_uid')
+                        ->orderBy('name');
+                },
+            ])
+            ->withCount(['users', 'positions'])
             ->orderBy('name')
             ->get()
         );
@@ -35,7 +38,6 @@ class DepartmentController extends Controller
 
     /**
      * POST /api/departments
-     * Réservé à rh/directeur.
      */
     public function store(StoreDepartmentRequest $request)
     {
@@ -43,12 +45,11 @@ class DepartmentController extends Controller
 
         $department = Department::create($request->validated());
 
-        return response()->json($department, 201);
+        return response()->json($department->load('positions'), 201);
     }
 
     /**
      * PUT/PATCH /api/departments/{department}
-     * Réservé à rh/directeur.
      */
     public function update(UpdateDepartmentRequest $request, Department $department)
     {
@@ -56,13 +57,11 @@ class DepartmentController extends Controller
 
         $department->update($request->validated());
 
-        return response()->json($department);
+        return response()->json($department->load('positions'));
     }
 
     /**
      * DELETE /api/departments/{department}
-     * Réservé à rh/directeur.
-     * Les employés rattachés passent à department_id = null (nullOnDelete).
      */
     public function destroy(Department $department)
     {

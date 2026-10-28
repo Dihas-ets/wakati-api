@@ -54,6 +54,7 @@ class User extends Authenticatable
         'agency_id',
         'name',
         'email',
+        'phone',
         'password',
         'role',
         'job_title',
@@ -97,9 +98,75 @@ class User extends Authenticatable
         return $this->hasMany(Attendance::class);
     }
 
+    public function positions(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Position::class, 'user_positions')
+            ->withPivot('is_primary')
+            ->withTimestamps();
+    }
+
+    public function primaryPosition(): ?Position
+    {
+        if ($this->relationLoaded('positions')) {
+            return $this->positions->firstWhere('pivot.is_primary', true) ?: $this->positions->first();
+        }
+
+        return $this->positions()->wherePivot('is_primary', true)->first() ?: $this->positions()->first();
+    }
+
+    /**
+     * Vérifie le cumul des permissions JSON de tous ses postes rattachés.
+     */
+    public function hasPermission(string $permission): bool
+    {
+        if ($this->isSuperAdmin() || $this->isCompanyAdmin() || $this->role === self::ROLE_DIRECTEUR) {
+            return true;
+        }
+
+        $positions = $this->relationLoaded('positions') ? $this->positions : $this->positions()->get();
+
+        foreach ($positions as $pos) {
+            $perms = (array) ($pos->permissions ?? []);
+            if (in_array('*', $perms, true) || in_array('admin', $perms, true) || in_array($permission, $perms, true)) {
+                return true;
+            }
+        }
+
+        // Rétrocompatibilité avec les rôles existants
+        if ($permission === 'rh' && ($this->role === self::ROLE_RH || $this->isCompanyAdmin())) {
+            return true;
+        }
+        if ($permission === 'comptable' && ($this->role === self::ROLE_COMPTABLE || $this->hasPermission('accounting'))) {
+            return true;
+        }
+        if ($permission === 'directeur' && $this->role === self::ROLE_DIRECTEUR) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Vérifie s'il possède au moins un poste sensible (ex: Comptable, RH).
+     */
+    public function hasSensitiveRole(): bool
+    {
+        if ($this->isSuperAdmin() || $this->isCompanyAdmin()) {
+            return true;
+        }
+
+        $positions = $this->relationLoaded('positions') ? $this->positions : $this->positions()->get();
+
+        return $positions->contains(fn (Position $p) => (bool) $p->is_sensitive);
+    }
+
     public function hasRole(string $role): bool
     {
-        return $this->role === $role;
+        if ($this->role === $role) {
+            return true;
+        }
+
+        return $this->hasPermission($role);
     }
 
     public function isSuperAdmin(): bool
@@ -114,22 +181,38 @@ class User extends Authenticatable
 
     public function isAdmin(): bool
     {
-        return in_array($this->role, [self::ROLE_SUPER_ADMIN, self::ROLE_COMPANY_ADMIN, self::ROLE_DIRECTEUR], true);
+        return in_array($this->role, [self::ROLE_SUPER_ADMIN, self::ROLE_COMPANY_ADMIN, self::ROLE_DIRECTEUR], true)
+            || $this->hasPermission('admin');
     }
 
     public function isDirector(): bool
     {
-        return $this->role === self::ROLE_DIRECTEUR;
+        return in_array($this->role, [self::ROLE_DIRECTEUR, self::ROLE_COMPANY_ADMIN], true);
     }
 
     public function isManager(): bool
     {
-        return in_array($this->role, [self::ROLE_MANAGER, self::ROLE_DIRECTEUR], true);
+        return in_array($this->role, [self::ROLE_MANAGER, self::ROLE_DIRECTEUR, self::ROLE_COMPANY_ADMIN], true);
     }
 
     public function isEmployee(): bool
     {
         return in_array($this->role, [self::ROLE_EMPLOYEE, self::ROLE_EMPLOYE], true);
+    }
+
+    public function payrolls(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Payroll::class);
+    }
+
+    public function auditLogsAuthored(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(AuditLog::class, 'user_id');
+    }
+
+    public function auditLogsReceived(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(AuditLog::class, 'target_user_id');
     }
 
     /**
@@ -139,7 +222,7 @@ class User extends Authenticatable
     {
         do {
             $uid = 'WAK-'.strtoupper(bin2hex(random_bytes(6)));
-        } while (static::where('card_uid', $uid)->exists());
+        } while (static::withoutGlobalScopes()->where('card_uid', $uid)->exists());
 
         return $uid;
     }
@@ -147,10 +230,6 @@ class User extends Authenticatable
     /**
      * Forme canonique d'un identifiant de badge : le même badge peut être lu
      * "04:a1:b2:c3" (Web NFC) ou "04A1B2C3" (lecteur USB / Raspberry Pi).
-     * Les séparateurs des numéros de série hexadécimaux sont retirés et tout
-     * est mis en majuscules ; les codes "WAK-..." restent inchangés.
-     *
-     * ⚠ Doit rester identique à normalizeCardUid() côté front (lib/card-uid.ts).
      */
     public static function normalizeCardUid(string $raw): string
     {
@@ -216,6 +295,9 @@ class User extends Authenticatable
         static::creating(function (User $user) {
             if (! array_key_exists('card_uid', $user->getAttributes())) {
                 $user->card_uid = static::newCardUid();
+            }
+            if (empty($user->role)) {
+                $user->role = self::ROLE_EMPLOYE;
             }
         });
     }

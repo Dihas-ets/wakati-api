@@ -112,4 +112,12 @@ class UserPolicy
             User::ROLE_RH,
         ], true);
     }
+
+    /**
+     * Attribution de postes sensibles : réservé aux administrateurs.
+     */
+    public function assignSensitivePosition(User $user): bool
+    {
+        return in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN, User::ROLE_DIRECTEUR], true);
+    }
 }
